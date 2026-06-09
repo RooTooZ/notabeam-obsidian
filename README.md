@@ -45,7 +45,7 @@ Notabeam keeps your Obsidian vault in sync across desktop and mobile, **in real 
 
 ## Contents
 
-- [Why Notabeam](#-why-notabeam)
+- [What makes Notabeam different](#-what-makes-notabeam-different)
 - [Highlights](#-highlights)
 - [Quickstart](#-quickstart)
 - [Installation](#-installation)
@@ -56,24 +56,13 @@ Notabeam keeps your Obsidian vault in sync across desktop and mobile, **in real 
 - [Privacy & security](#-privacy--security)
 - [Contributing & support](#-contributing--support)
 
-## ⚖️ Why Notabeam
+## 🎯 What makes Notabeam different
 
-Compared with other self-hosted, community sync plugins:
-
-| | **Notabeam** | Self-hosted LiveSync | Remotely Save |
-|---|:---:|:---:|:---:|
-| Real-time sync | ✅ | ✅ | ❌ scheduled |
-| Self-host on **your** server | ✅ | ✅ | ➖ your cloud storage |
-| **No** CouchDB / object storage to run | ✅ | ❌ CouchDB | ❌ S3/cloud |
-| Desktop + mobile | ✅ | ✅ | ✅ |
-| Binary attachments (images, PDF…) | ✅ | ✅ | ✅ |
-| End-to-end encryption | 🔜 (TLS today) | ✅ | ✅ |
-| Managed cloud (no server to run) | 🔜 | ❌ | ❌ |
-| AI / MCP access to your vault | 🔜 | ❌ | ❌ |
-
-✅ available · 🔜 on the [roadmap](#-project-status--roadmap) · ➖ partial. *We list what's coming as 🔜, not ✅ — see [project status](#-project-status--roadmap).*
-
-**The short version:** Notabeam gives you real-time sync, a server you fully own, and a setup that takes minutes — and it's heading toward managed cloud and AI access to your notes.
+- **Real-time, not scheduled.** Changes propagate the instant you type, over a live WebSocket connection — not on a timer or a manual push.
+- **Self-host without the hassle.** One `docker run` or a single binary keeps your notes on a server you own. No CouchDB, no object storage, no multi-step setup.
+- **Safe by design.** Deletions are non-destructive (they go to the trash), divergent edits are kept as conflict copies, and offline changes catch up on reconnect — nothing is silently lost.
+- **More than Markdown.** Syncs `.md`, `.canvas`, `.excalidraw` and binary attachments, with per-file sync indicators right in the file explorer.
+- **Open-core, and going further.** Free self-host today; managed cloud (no server to run) and AI / MCP access to your vault are on the [roadmap](#-project-status--roadmap).
 
 ## ✨ Highlights
 
