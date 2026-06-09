@@ -4,7 +4,7 @@ import { type BlobHttp, HttpBlobClient, httpBaseFromWs } from "@/sync/blob-clien
 
 const enc = (s: string): ArrayBuffer => new TextEncoder().encode(s).buffer;
 
-// Фейковый HTTP: отвечает по таблице статусов, записывает запросы.
+// Fake HTTP: responds according to a status table, records requests.
 const fakeHttp = (
   responses: Record<string, { status: number; arrayBuffer?: ArrayBuffer }>,
   log: { method: string; url: string; auth?: string; body?: ArrayBuffer }[] = [],
@@ -17,7 +17,7 @@ const fakeHttp = (
 };
 
 describe("httpBaseFromWs", () => {
-  it("ws→http, wss→https, без хвостового слеша", () => {
+  it("ws→http, wss→https, without trailing slash", () => {
     expect(httpBaseFromWs("ws://localhost:3000")).toBe("http://localhost:3000");
     expect(httpBaseFromWs("wss://obs.progkit.dev/")).toBe("https://obs.progkit.dev");
     expect(httpBaseFromWs("wss://h//")).toBe("https://h");
@@ -25,7 +25,7 @@ describe("httpBaseFromWs", () => {
 });
 
 describe("HttpBlobClient", () => {
-  it("has: HEAD 200 → true, 404 → false; шлёт токен", async () => {
+  it("has: HEAD 200 → true, 404 → false; sends the token", async () => {
     const log: { method: string; url: string; auth?: string }[] = [];
     const present = new HttpBlobClient("http://s", "tok", fakeHttp({ HEAD: { status: 200 } }, log));
     expect(await present.has("h1")).toBe(true);
@@ -36,7 +36,7 @@ describe("HttpBlobClient", () => {
     expect(await missing.has("h1")).toBe(false);
   });
 
-  it("upload: 2xx → ok, иначе ok=false со статусом", async () => {
+  it("upload: 2xx → ok, otherwise ok=false with status", async () => {
     const ok = new HttpBlobClient("http://s", "t", fakeHttp({ PUT: { status: 201 } }));
     expect(await ok.upload("h", enc("x"))).toEqual({ ok: true, status: 201 });
 
@@ -44,7 +44,7 @@ describe("HttpBlobClient", () => {
     expect(await tooLarge.upload("h", enc("x"))).toEqual({ ok: false, status: 413 });
   });
 
-  it("download: 200 → байты, 404 → null", async () => {
+  it("download: 200 → bytes, 404 → null", async () => {
     const data = enc("payload");
     const has = new HttpBlobClient("http://s", "t", fakeHttp({ GET: { status: 200, arrayBuffer: data } }));
     expect(await has.download("h")).toBe(data);

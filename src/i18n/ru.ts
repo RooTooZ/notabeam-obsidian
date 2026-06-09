@@ -1,6 +1,5 @@
 import type { TKey } from "./en";
 
-// Русский словарь. Отсутствующие ключи — фолбэк на en.
 export const ru: Partial<Record<TKey, string>> = {
   "settings.serverUrl.name": "Адрес сервера",
   "settings.serverUrl.desc": "ws:// или wss://",

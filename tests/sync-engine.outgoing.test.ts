@@ -25,12 +25,12 @@ const setup = () => {
 };
 
 describe("SyncEngine outgoing rename/move", () => {
-  it("известный серверу файл → rename-дельта", async () => {
+  it("server-known file -> rename delta", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("a.md", "A");
-    await engine.handleLocalUpsert("a.md"); // upsert → shadow знает a.md
+    await engine.handleLocalUpsert("a.md"); // upsert -> shadow knows a.md
     transport.sent.length = 0;
-    // move на диске
+    // move on disk
     vault.files.set("dir/a.md", "A");
     vault.files.delete("a.md");
     await engine.handleLocalRename("a.md", "dir/a.md");
@@ -42,9 +42,9 @@ describe("SyncEngine outgoing rename/move", () => {
     });
   });
 
-  it("несинканный файл (быстрый create+move) → upsert нового пути, без потери", async () => {
+  it("unsynced file (fast create+move) -> upsert of the new path, no loss", async () => {
     const { vault, transport, engine } = setup();
-    // файл уже лежит в папке (move произошёл), но shadow про a.md ничего не знает
+    // file already sits in the folder (move happened), but shadow knows nothing about a.md
     vault.files.set("dir/a.md", "A");
     await engine.handleLocalRename("a.md", "dir/a.md");
     expect(transport.sent).toHaveLength(1);
@@ -55,7 +55,7 @@ describe("SyncEngine outgoing rename/move", () => {
     });
   });
 
-  it("move .md → не-.md трактуется как delete исходного", async () => {
+  it("move .md -> non-.md is treated as a delete of the source", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("a.md", "A");
     await engine.handleLocalUpsert("a.md");
@@ -67,17 +67,17 @@ describe("SyncEngine outgoing rename/move", () => {
 });
 
 describe("SyncEngine folders outgoing", () => {
-  it("mkdir → mkdir-дельта; повтор (эхо) не шлётся", async () => {
+  it("mkdir -> mkdir delta; a repeat (echo) is not sent", async () => {
     const { transport, engine } = setup();
     await engine.handleLocalMkdir("Folder");
     expect(transport.sent).toHaveLength(1);
     expect(transport.sent[0]).toMatchObject({ delta: { op: "mkdir", path: "Folder" } });
     transport.sent.length = 0;
-    await engine.handleLocalMkdir("Folder"); // уже существует
+    await engine.handleLocalMkdir("Folder"); // already exists
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("rmdir → rmdir-дельта; повтор (эхо) не шлётся", async () => {
+  it("rmdir -> rmdir delta; a repeat (echo) is not sent", async () => {
     const { transport, engine } = setup();
     await engine.handleLocalMkdir("Folder");
     transport.sent.length = 0;
@@ -85,25 +85,25 @@ describe("SyncEngine folders outgoing", () => {
     expect(transport.sent).toHaveLength(1);
     expect(transport.sent[0]).toMatchObject({ delta: { op: "rmdir", path: "Folder" } });
     transport.sent.length = 0;
-    await engine.handleLocalRmdir("Folder"); // уже удалена
+    await engine.handleLocalRmdir("Folder"); // already removed
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("applyIncoming mkdir гасит эхо последующего локального mkdir", async () => {
+  it("applyIncoming mkdir suppresses the echo of a subsequent local mkdir", async () => {
     const { engine, transport } = setup();
     await engine.applyIncoming({ op: "mkdir", path: "F", hlc: "000000000001000:000000:srv" });
-    await engine.handleLocalMkdir("F"); // эхо применённого mkdir
+    await engine.handleLocalMkdir("F"); // echo of the applied mkdir
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("renamedir → renamedir-дельта; эхо применённого гасится", async () => {
+  it("renamedir -> renamedir delta; the echo of the applied one is suppressed", async () => {
     const { engine, transport } = setup();
     await engine.handleLocalRenamedir("Old", "New");
     expect(transport.sent).toHaveLength(1);
     expect(transport.sent[0]).toMatchObject({ delta: { op: "renamedir", fromPath: "Old", toPath: "New" } });
     transport.sent.length = 0;
     await engine.applyIncoming({ op: "renamedir", fromPath: "A", toPath: "B", hlc: "000000000009000:000000:srv" });
-    await engine.handleLocalRenamedir("A", "B"); // эхо
+    await engine.handleLocalRenamedir("A", "B"); // echo
     expect(transport.sent).toHaveLength(0);
   });
 });

@@ -7,7 +7,6 @@ export type HlcGen = {
   observe: (hlc: Hlc) => void;
 };
 
-// Генератор HLC: монотонный относительно прошлых локальных и наблюдённых удалённых меток.
 export const createHlcGenerator = (opts: {
   node: string;
   clock: Clock;

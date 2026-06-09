@@ -46,7 +46,7 @@ const setup = (binding: BindingHooks) => {
 };
 
 describe("SyncEngine vault binding (REQ-01.12)", () => {
-  it("первая синхронизация при пустом локальном vault — привязывается и применяет", async () => {
+  it("first sync with an empty local vault — binds and applies", async () => {
     const b = makeBinding("", false);
     const { vault, engine } = setup(b.hooks);
     await engine.applySnapshot(snap("vault-X", [{ path: "a.md", content: "A" }]));
@@ -54,18 +54,18 @@ describe("SyncEngine vault binding (REQ-01.12)", () => {
     expect(await vault.read("a.md")).toBe("A");
   });
 
-  it("обе стороны непустые без подтверждения — отказ, snapshot НЕ применён, исходящие заблокированы", async () => {
+  it("both sides non-empty without confirmation — refuses, snapshot NOT applied, outgoing blocked", async () => {
     const b = makeBinding("", false);
     const { vault, transport, engine } = setup(b.hooks);
-    vault.files.set("local.md", "L"); // локальный непустой
+    vault.files.set("local.md", "L"); // local is non-empty
     await engine.applySnapshot(snap("vault-X", [{ path: "srv.md", content: "S" }]));
     expect(b.calls.some((c) => c.startsWith("refuse:needConfirm"))).toBe(true);
-    expect(await vault.read("srv.md")).toBeNull(); // не применили
-    await engine.handleLocalUpsert("local.md"); // halted → не шлём
+    expect(await vault.read("srv.md")).toBeNull(); // not applied
+    await engine.handleLocalUpsert("local.md"); // halted → don't send
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("обе стороны непустые + подтверждение — привязывается и применяет", async () => {
+  it("both sides non-empty + confirmation — binds and applies", async () => {
     const b = makeBinding("", true);
     const { vault, engine } = setup(b.hooks);
     vault.files.set("local.md", "L");
@@ -74,7 +74,7 @@ describe("SyncEngine vault binding (REQ-01.12)", () => {
     expect(await vault.read("srv.md")).toBe("S");
   });
 
-  it("привязан к X, сервер прислал Y — отказ (mismatch), не применяем и не шлём", async () => {
+  it("bound to X, server sent Y — refuses (mismatch), does not apply or send", async () => {
     const b = makeBinding("vault-X", false);
     const { vault, transport, engine } = setup(b.hooks);
     await engine.applySnapshot(snap("vault-Y", [{ path: "srv.md", content: "S" }]));
@@ -85,7 +85,7 @@ describe("SyncEngine vault binding (REQ-01.12)", () => {
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("привязан к X, сервер прислал X — применяет нормально", async () => {
+  it("bound to X, server sent X — applies normally", async () => {
     const b = makeBinding("vault-X", false);
     const { vault, engine } = setup(b.hooks);
     await engine.applySnapshot(snap("vault-X", [{ path: "srv.md", content: "S" }]));

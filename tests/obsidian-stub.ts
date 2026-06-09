@@ -1,6 +1,6 @@
-// Рантайм-стаб пакета `obsidian` для тестов: реальный пакет — types-only
-// (нет main), значения (TFile и пр.) существуют только внутри приложения Obsidian.
-// Подключается через resolve.alias в vitest.config.ts.
+// Runtime stub of the `obsidian` package for tests: the real package is types-only
+// (no main), values (TFile and the like) exist only inside the Obsidian app.
+// Wired in via resolve.alias in vitest.config.ts.
 
 export class TFile {
   path = "";

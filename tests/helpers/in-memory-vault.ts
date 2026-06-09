@@ -27,7 +27,7 @@ export class InMemoryVault implements VaultPort {
   }
 
   async trash(path: string): Promise<void> {
-    await this.remove(path); // корзина не моделируется в тестах
+    await this.remove(path); // trash is not modeled in tests
   }
 
   async rename(from: string, to: string): Promise<void> {

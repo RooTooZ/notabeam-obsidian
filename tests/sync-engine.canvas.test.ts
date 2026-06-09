@@ -33,8 +33,8 @@ const setup = () => {
   return { vault, transport, engine };
 };
 
-describe("SyncEngine: .canvas синкается как текст (как .md)", () => {
-  it("локальный .canvas → upsert (текст), не attach", async () => {
+describe("SyncEngine: .canvas syncs as text (like .md)", () => {
+  it("local .canvas → upsert (text), not attach", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("board.canvas", '{"nodes":[]}');
     await engine.handleLocalUpsert("board.canvas");
@@ -45,20 +45,20 @@ describe("SyncEngine: .canvas синкается как текст (как .md)"
     });
   });
 
-  it("handleLocalAttach игнорирует .canvas (это текст)", async () => {
+  it("handleLocalAttach ignores .canvas (it is text)", async () => {
     const { vault, transport, engine } = setup();
     await vault.writeBinary("board.canvas", new Uint8Array([1, 2, 3]).buffer);
     await engine.handleLocalAttach("board.canvas");
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("входящий upsert .canvas пишет файл (текст)", async () => {
+  it("incoming .canvas upsert writes the file (text)", async () => {
     const { vault, engine } = setup();
     await engine.applyIncoming({ op: "upsert", path: "b.canvas", content: '{"x":1}', hlc: hlc(1) });
     expect(await vault.read("b.canvas")).toBe('{"x":1}');
   });
 
-  it("watcher маршрутизирует .canvas в текстовый upsert (debounce)", async () => {
+  it("watcher routes .canvas into a text upsert (debounce)", async () => {
     const { vault, transport, engine } = setup();
     const watcher = new VaultWatcher(engine, { debounceMs: 5 });
     vault.files.set("c.canvas", "{}");

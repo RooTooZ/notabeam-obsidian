@@ -36,36 +36,36 @@ const snap = (files: { path: string; content: string; hlc: string }[]): Snapshot
 });
 
 describe("SyncEngine conflict copies (REQ-02.8)", () => {
-  it("дивергентная локальная правка сохраняется как (conflict …), входящая применяется", async () => {
+  it("divergent local edit is saved as (conflict …), incoming edit is applied", async () => {
     const { vault, engine } = setup();
-    // базовая синхронизированная версия
+    // base synced version
     await engine.applySnapshot(snap([{ path: "note.md", content: "base", hlc: hlc(1) }]));
     expect(await vault.read("note.md")).toBe("base");
 
-    // локальная несинхронизированная правка «за спиной» движка (shadow остаётся "base")
+    // local unsynced edit behind the engine's back (shadow stays "base")
     await vault.write("note.md", "local-edit");
 
-    // входящая правка с бóльшим HLC
+    // incoming edit with a greater HLC
     await engine.applyIncoming({ op: "upsert", path: "note.md", content: "remote-edit", hlc: hlc(5) });
 
-    expect(await vault.read("note.md")).toBe("remote-edit"); // победитель по LWW
-    // локальная правка не потеряна — лежит рядом конфликт-копией
+    expect(await vault.read("note.md")).toBe("remote-edit"); // LWW winner
+    // local edit is not lost — it sits alongside as a conflict copy
     const conflict = [...vault.files.keys()].find((p) => p.includes("(conflict"));
     expect(conflict).toBeTruthy();
     expect(conflict?.endsWith(".md")).toBe(true);
     expect(await vault.read(conflict!)).toBe("local-edit");
   });
 
-  it("нет дивергенции (локальное == last-synced) → без конфликт-копии", async () => {
+  it("no divergence (local == last-synced) → no conflict copy", async () => {
     const { vault, engine } = setup();
     await engine.applySnapshot(snap([{ path: "n.md", content: "base", hlc: hlc(1) }]));
-    // локальное совпадает с shadow → обычный LWW
+    // local matches shadow → plain LWW
     await engine.applyIncoming({ op: "upsert", path: "n.md", content: "v2", hlc: hlc(2) });
     expect(await vault.read("n.md")).toBe("v2");
     expect([...vault.files.keys()].some((p) => p.includes("(conflict"))).toBe(false);
   });
 
-  it("работает для .canvas", async () => {
+  it("works for .canvas", async () => {
     const { vault, engine } = setup();
     await engine.applySnapshot(snap([{ path: "b.canvas", content: "{}", hlc: hlc(1) }]));
     await vault.write("b.canvas", '{"local":1}');

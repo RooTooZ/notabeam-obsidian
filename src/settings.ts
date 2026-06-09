@@ -6,9 +6,7 @@ export type SyncSettings = {
   serverUrl: string;
   vaultToken: string;
   deviceId: string;
-  // Защита от смешивания (REQ-01.12): к какому серверному vault привязан локальный.
   boundVaultId: string;
-  // Явное согласие пользователя слить непустой локальный vault с непустым серверным.
   confirmMerge: boolean;
 };
 

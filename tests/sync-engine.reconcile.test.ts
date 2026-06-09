@@ -55,8 +55,8 @@ const snap = (over: Partial<SnapshotMessage> = {}): SnapshotMessage => ({
   ...over,
 });
 
-describe("SyncEngine reconcile при подключении (REQ-01.13)", () => {
-  it("догружает локальный .md, которого нет на сервере", async () => {
+describe("SyncEngine reconcile on connect (REQ-01.13)", () => {
+  it("uploads a local .md that is missing on the server", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("offline-new.md", "added while offline");
 
@@ -68,7 +68,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     );
   });
 
-  it("не дошлёт .md, который уже есть на сервере (в snapshot)", async () => {
+  it("does not re-send a .md that already exists on the server (in snapshot)", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("known.md", "X");
 
@@ -77,7 +77,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("НЕ воскрешает файл с tombstone (удалён на другом устройстве)", async () => {
+  it("does NOT resurrect a file with a tombstone (deleted on another device)", async () => {
     const { vault, transport, engine } = setup();
     vault.files.set("deleted-elsewhere.md", "stale local copy");
 
@@ -86,7 +86,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("догружает локальное вложение, которого нет на сервере (upload + attach)", async () => {
+  it("uploads a local attachment that is missing on the server (upload + attach)", async () => {
     const { vault, transport, engine, blob } = setup(true);
     const data = new Uint8Array([1, 2, 3, 4, 5]).buffer;
     const hash = await sha256Hex(data);
@@ -100,7 +100,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     );
   });
 
-  it("не дошлёт вложение, уже известное серверу", async () => {
+  it("does not re-send an attachment already known to the server", async () => {
     const { vault, transport, engine, blob } = setup(true);
     const data = new Uint8Array([7, 7]).buffer;
     const hash = await sha256Hex(data);
@@ -112,7 +112,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     expect(transport.sent).toHaveLength(0);
   });
 
-  it("не сверяет при отказе по привязке (halted)", async () => {
+  it("does not reconcile when binding is refused (halted)", async () => {
     const vault = new InMemoryVault();
     const transport = new FakeTransport();
     let last: string | null = null;
@@ -132,7 +132,7 @@ describe("SyncEngine reconcile при подключении (REQ-01.13)", () =>
     const engine = new SyncEngine(vault, transport, gen, binding);
     vault.files.set("local.md", "X");
 
-    await engine.applySnapshot(snap({ vaultId: "vault-B" })); // mismatch → отказ
+    await engine.applySnapshot(snap({ vaultId: "vault-B" })); // mismatch → refused
 
     expect(transport.sent).toHaveLength(0);
   });

@@ -1,6 +1,3 @@
-// HTTP-клиент blob-хранилища вложений (Spec-03, REQ-03.2).
-// HTTP-транспорт инъектируется (в рантайме — Obsidian requestUrl, в тестах — фейк),
-// чтобы клиент не зависел от fetch/CORS и был юнит-тестируемым.
 export type BlobHttp = (req: {
   url: string;
   method: string;
@@ -9,12 +6,11 @@ export type BlobHttp = (req: {
 }) => Promise<{ status: number; arrayBuffer: ArrayBuffer }>;
 
 export interface BlobClient {
-  has(hash: string): Promise<boolean>; // HEAD — для дедупа (REQ-03.2)
+  has(hash: string): Promise<boolean>;
   upload(hash: string, data: ArrayBuffer): Promise<{ ok: boolean; status: number }>;
   download(hash: string): Promise<ArrayBuffer | null>;
 }
 
-// serverUrl плагина — ws://|wss:// (тот же хост, что WebSocket). Blob идёт по http(s).
 export const httpBaseFromWs = (wsUrl: string): string => {
   const base = wsUrl.replace(/^ws/, "http").replace(/\/+$/, "");
   return base;

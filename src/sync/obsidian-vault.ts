@@ -3,11 +3,9 @@ import { TFile, TFolder, type Vault } from "obsidian";
 
 import type { VaultFile, VaultPort } from "./vault-port";
 
-// Реализация VaultPort поверх Obsidian Vault API (только кроссплатформенные методы).
 export class ObsidianVault implements VaultPort {
   constructor(private readonly vault: Vault) {}
 
-  // Текстовые файлы (.md/.canvas), кроме .obsidian/ — синкаются как текст.
   async list(): Promise<VaultFile[]> {
     const files = this.vault
       .getFiles()
@@ -42,7 +40,6 @@ export class ObsidianVault implements VaultPort {
     if (f !== null) await this.vault.delete(f);
   }
 
-  // Удаление в корзину Obsidian (.trash) — обратимо (REQ-02.7). system=false → vault .trash.
   async trash(path: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(path);
     if (f !== null) await this.vault.trash(f, false);
@@ -51,8 +48,6 @@ export class ObsidianVault implements VaultPort {
   async rename(from: string, to: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(from);
     if (f === null) return;
-    // целевой папки может не быть на этом устройстве (пустые папки не синкаются) —
-    // создаём, иначе vault.rename упадёт и файл «застрянет» на старом пути.
     const dir = to.split("/").slice(0, -1).join("/");
     if (dir && this.vault.getAbstractFileByPath(dir) === null) {
       await this.vault.createFolder(dir).catch(() => undefined);
@@ -83,7 +78,6 @@ export class ObsidianVault implements VaultPort {
   }
 
   async listAttachments(): Promise<string[]> {
-    // Все файлы vault, кроме текстовых (.md/.canvas) и каталога конфигурации .obsidian/.
     return this.vault
       .getFiles()
       .map((f) => f.path)
@@ -103,8 +97,6 @@ export class ObsidianVault implements VaultPort {
       await this.vault.delete(f, true);
       return;
     }
-    // Рекурсивно: сначала содержимое, потом саму папку (vault.delete не каскадит
-    // непустую папку надёжно на всех платформах).
     for (const child of [...f.children]) {
       if (child instanceof TFolder) await this.removeDir(child.path);
       else await this.vault.delete(child, true);
@@ -114,11 +106,9 @@ export class ObsidianVault implements VaultPort {
 
   async moveDir(from: string, to: string): Promise<void> {
     const src = this.vault.getAbstractFileByPath(from);
-    if (!(src instanceof TFolder)) return; // уже переехала (через детские rename) или нет
+    if (!(src instanceof TFolder)) return;
     const dst = this.vault.getAbstractFileByPath(to);
     if (dst instanceof TFolder) {
-      // Целевая уже есть (гонка с file-rename детей) — сливаем: переносим детей и
-      // удаляем опустевшую исходную папку.
       for (const child of [...src.children]) {
         const target = `${to}/${child.name}`;
         if (child instanceof TFolder) await this.moveDir(child.path, target);

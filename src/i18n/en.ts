@@ -1,4 +1,3 @@
-// Английский словарь — источник ключей i18n (REQ-09.1). Остальные языки — Partial.
 export const en = {
   "settings.serverUrl.name": "Server address",
   "settings.serverUrl.desc": "ws:// or wss://",

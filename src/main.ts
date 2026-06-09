@@ -24,7 +24,6 @@ const FILE_STATE_KEY: Record<FileSyncState, "file.synced" | "file.pending" | "fi
 
 const MB = 1024 * 1024;
 
-// HTTP-транспорт blob через Obsidian requestUrl (без CORS, кроссплатформенно).
 const obsidianHttp: BlobHttp = async (req) => {
   const res = await requestUrl({
     url: req.url,
@@ -41,7 +40,7 @@ type PluginData = { settings: SyncSettings; lastHlc: string | null; lastSeq: num
 export default class NotabeamPlugin extends Plugin {
   override settings: SyncSettings = { ...DEFAULT_SETTINGS };
   private lastHlc: string | null = null;
-  private lastSeq = 0; // курсор устройства (Spec-02)
+  private lastSeq = 0;
   private engine: SyncEngine | null = null;
   private watcher: VaultWatcher | null = null;
   private statusEl: HTMLElement | null = null;
@@ -58,8 +57,6 @@ export default class NotabeamPlugin extends Plugin {
     this.statusEl.addClass("mod-clickable");
     this.statusEl.onClickEvent(() => this.openSettings());
     this.addSettingTab(new SyncSettingTab(this.app, this));
-    // Пер-файловые значки в проводнике (Spec-09) — desktop-only поверхность
-    // (DOM file-explorer); на mobile не включаем (REQ-10.4).
     if (Platform.isDesktop) {
       this.badges = new FileBadges((s) => t(FILE_STATE_KEY[s]));
       this.app.workspace.onLayoutReady(() => this.badges?.start());
@@ -76,7 +73,6 @@ export default class NotabeamPlugin extends Plugin {
   }
 
   private openSettings(): void {
-    // app.setting — desktop-only API; на mobile не трогаем (REQ-10.4).
     if (!Platform.isDesktop) return;
     const setting = (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } })
       .setting;
@@ -106,7 +102,7 @@ export default class NotabeamPlugin extends Plugin {
       this.settings.vaultToken,
       this.settings.deviceId,
       undefined,
-      () => this.lastSeq, // курсор при (пере)подключении (Spec-02)
+      () => this.lastSeq,
     );
     transport.onStatus((s) => this.setStatus(transportToUi(s)));
     this.setStatus("connecting");
@@ -191,18 +187,16 @@ export default class NotabeamPlugin extends Plugin {
         if (f instanceof TFolder) watcher.onRmdir(f.path);
         else {
           watcher.onDelete(f.path);
-          this.badges?.clear(f.path); // убрать значок удалённого файла
+          this.badges?.clear(f.path);
         }
       }),
     );
     this.registerEvent(
       this.app.vault.on("rename", (f, oldPath) => {
         if (f instanceof TFile) {
-          this.badges?.clear(oldPath); // значок переедет на новый путь после синка
+          this.badges?.clear(oldPath);
           watcher.onRename(oldPath, f.path);
         }
-        // Папку переносим как сущность (renamedir): атомарный префиксный перенос
-        // папки + содержимого, без гонок с file-rename событиями детей.
         else if (f instanceof TFolder) watcher.onRenamedir(oldPath, f.path);
       }),
     );

@@ -17,7 +17,7 @@ class FakeWS {
     opts?: { signal?: AbortSignal },
   ): void {
     (this.listeners[type] ??= []).push(cb);
-    // как настоящий EventTarget: signal.abort() снимает слушатель
+    // like a real EventTarget: signal.abort() removes the listener
     opts?.signal?.addEventListener("abort", () => {
       const arr = this.listeners[type];
       if (arr) this.listeners[type] = arr.filter((f) => f !== cb);
@@ -50,7 +50,7 @@ describe("nextBackoffDelay", () => {
     expect(nextBackoffDelay(0)).toBe(1000);
     expect(nextBackoffDelay(1)).toBe(2000);
     expect(nextBackoffDelay(2)).toBe(4000);
-    expect(nextBackoffDelay(10)).toBe(30000); // верхняя граница
+    expect(nextBackoffDelay(10)).toBe(30000); // upper bound
   });
 });
 
@@ -77,10 +77,10 @@ describe("WsTransport reconnect", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);
     t.connect();
     const ws = FakeWS.instances[0]!;
-    // сокет ещё не open (readyState=0) → send должен попасть в очередь, не потеряться
+    // socket is not open yet (readyState=0) → send should be queued, not lost
     t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "off.md", hlc: "h" } });
     expect(ws.sent).toHaveLength(0);
-    // соединение открылось → очередь досылается
+    // connection opened → the queue is flushed
     ws.emit("open");
     expect(ws.sent).toHaveLength(1);
     expect(JSON.parse(ws.sent[0]!).delta.path).toBe("off.md");
@@ -96,20 +96,20 @@ describe("WsTransport reconnect", () => {
   });
 
   it("test_no_listener_leak_on_reconnect", () => {
-    // REQ-10.3: слушатели прошлого сокета снимаются при переподключении —
-    // позднее событие на старом сокете не плодит лишний reconnect.
+    // REQ-10.3: the previous socket's listeners are removed on reconnect —
+    // a late event on the old socket does not spawn an extra reconnect.
     const t = new WsTransport("ws://x", "tok", "dev", factory);
     t.connect();
     const ws1 = FakeWS.instances[0]!;
-    ws1.emit("close"); // планируем reconnect
-    vi.advanceTimersByTime(1500); // open() -> teardown ws1 + создаёт ws2
+    ws1.emit("close"); // schedule reconnect
+    vi.advanceTimersByTime(1500); // open() -> teardown ws1 + creates ws2
     expect(FakeWS.instances).toHaveLength(2);
-    // у ws1 слушатели должны быть сняты
+    // ws1 listeners should be removed
     expect((ws1.listeners["error"] ?? []).length).toBe(0);
-    // позднее событие на ws1 ничего не триггерит
+    // a late event on ws1 triggers nothing
     ws1.emit("error");
     vi.advanceTimersByTime(60000);
-    expect(FakeWS.instances).toHaveLength(2); // ws3 не появился
+    expect(FakeWS.instances).toHaveLength(2); // ws3 did not appear
   });
 
   it("test_close_removes_listeners", () => {

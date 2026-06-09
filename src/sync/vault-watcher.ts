@@ -2,13 +2,8 @@ import { isTextSyncedPath } from "@notabeam/shared";
 
 import type { SyncEngine } from "./sync-engine";
 
-// Каталог конфигурации Obsidian не синхронизируется (Spec-03, REQ-03.1).
 const isExcluded = (path: string): boolean => path === ".obsidian" || path.startsWith(".obsidian/");
 
-// Наблюдатель локальных изменений vault. Дебаунсит upsert (коалесцирует всплеск
-// сохранений), delete/rename отправляет сразу, отменяя ожидающий upsert по пути.
-// .md → текст (handleLocalUpsert), прочее → вложение (handleLocalAttach); маршрутизацию
-// delete/rename выполняет сам движок по расширению пути.
 export class VaultWatcher {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly debounceMs: number;
@@ -23,7 +18,7 @@ export class VaultWatcher {
   onUpsert(path: string): void {
     if (isExcluded(path)) return;
     this.cancel(path);
-    this.engine.markPending(path); // мгновенный индикатор «ожидает» (Spec-09)
+    this.engine.markPending(path);
     const timer = setTimeout(() => {
       this.timers.delete(path);
       if (isTextSyncedPath(path)) void this.engine.handleLocalUpsert(path);
@@ -39,7 +34,7 @@ export class VaultWatcher {
   }
 
   onRename(from: string, to: string): void {
-    if (isExcluded(to)) return; // цель в .obsidian — не синкаем
+    if (isExcluded(to)) return;
     this.cancel(from);
     void this.engine.handleLocalRename(from, to);
   }

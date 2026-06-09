@@ -24,10 +24,10 @@ export class FakeTransport implements Transport {
   }
 
   onOpen(): void {
-    // не нужно в тестах
+    // not needed in tests
   }
 
-  // тест-хелпер: эмулировать входящее сообщение сервера
+  // test helper: emulate an incoming server message
   emit(msg: ServerMessage): void {
     this.messageHandler(msg);
   }

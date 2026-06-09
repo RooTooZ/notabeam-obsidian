@@ -81,7 +81,7 @@ describe("VaultWatcher outgoing", () => {
   it("test_remote_applied_change_not_resent", async () => {
     const { transport, engine, watcher } = setup();
     await engine.applyIncoming({ op: "upsert", path: "a.md", content: "remote", hlc: hlc(1) });
-    // эхо: входящее применение вызвало бы локальный modify того же файла
+    // echo: applying the incoming change would trigger a local modify of the same file
     watcher.onUpsert("a.md");
     await sleep(25);
     expect(transport.sent).toHaveLength(0);

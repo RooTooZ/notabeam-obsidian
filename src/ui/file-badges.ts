@@ -1,10 +1,5 @@
 import type { FileSyncState } from "../sync/sync-engine";
 
-// Пер-файловые значки синхронизации в проводнике Obsidian (Spec-09), как в Dropbox:
-// ✓ синхронизировано, ⟳ ожидает/идёт, ⚠ ошибка (напр. вложение сверх лимита).
-// Публичного API для декораций файлов у Obsidian нет — аккуратно правим DOM:
-// строки файлов это `.nav-file-title[data-path]`. Деградирует молча, если разметка иная.
-
 const GLYPH: Record<FileSyncState, string> = { synced: "✓", pending: "⟳", error: "⚠" };
 const BADGE_CLASS = "nb-sync-badge";
 const STYLE_ID = "nb-sync-badge-style";
@@ -14,7 +9,6 @@ export class FileBadges {
   private observer: MutationObserver | null = null;
   private repaintQueued = false;
 
-  // label: перевод тултипа по состоянию (i18n t() прокидывается хостом).
   constructor(private readonly label: (s: FileSyncState) => string) {}
 
   start(): void {
@@ -48,7 +42,6 @@ export class FileBadges {
   private queueRepaint(): void {
     if (this.repaintQueued) return;
     this.repaintQueued = true;
-    // микро-дебаунс: схлопываем всплеск мутаций (раскрытие папки и т.п.)
     setTimeout(() => {
       this.repaintQueued = false;
       this.repaintAll();

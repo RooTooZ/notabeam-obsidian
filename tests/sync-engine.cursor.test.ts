@@ -45,14 +45,14 @@ const snap = (cursor: number): SnapshotMessage => ({
 });
 
 describe("SyncEngine cursor + ops (Spec-02)", () => {
-  it("snapshot.cursor инициализирует курсор", async () => {
+  it("snapshot.cursor initializes the cursor", async () => {
     const { transport, cursor } = setup();
     transport.emit(snap(42));
     await new Promise((r) => setTimeout(r, 0));
     expect(cursor()).toBe(42);
   });
 
-  it("пакет ops проигрывается по порядку, курсор = последний seq", async () => {
+  it("an ops batch is replayed in order, cursor = last seq", async () => {
     const { vault, transport, cursor } = setup();
     const ops: ServerMessage = {
       v: PROTOCOL_VERSION,
@@ -66,11 +66,11 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
     transport.emit(ops);
     await new Promise((r) => setTimeout(r, 0));
     expect(await vault.read("b.md")).toBe("B");
-    expect(await vault.read("a.md")).toBeNull(); // удаление из пакета применилось
+    expect(await vault.read("a.md")).toBeNull(); // the delete from the batch was applied
     expect(cursor()).toBe(7);
   });
 
-  it("живая delta с seq двигает курсор", async () => {
+  it("a live delta with seq advances the cursor", async () => {
     const { transport, cursor } = setup();
     transport.emit({
       v: PROTOCOL_VERSION,
@@ -82,9 +82,9 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
     expect(cursor()).toBe(99);
   });
 
-  it("курсор не откатывается назад", async () => {
+  it("the cursor does not roll back", async () => {
     const { transport, cursor } = setup(100);
-    transport.emit(snap(50)); // меньше текущего
+    transport.emit(snap(50)); // lower than the current one
     await new Promise((r) => setTimeout(r, 0));
     expect(cursor()).toBe(100);
   });

@@ -74,7 +74,7 @@ describe("SyncEngine incoming", () => {
     expect(await vault.read("a.md")).toBe("new");
   });
 
-  it("mkdir создаёт папку; rmdir рекурсивно удаляет папку с содержимым", async () => {
+  it("mkdir creates a folder; rmdir recursively deletes the folder with its contents", async () => {
     const { vault, engine } = setup();
     await engine.applyIncoming({ op: "mkdir", path: "Folder", hlc: hlc(1) });
     expect(vault.folders.has("Folder")).toBe(true);
@@ -84,7 +84,7 @@ describe("SyncEngine incoming", () => {
     expect(await vault.read("Folder/a.md")).toBeNull();
   });
 
-  it("renamedir переносит папку с содержимым (moveDir)", async () => {
+  it("renamedir moves the folder with its contents (moveDir)", async () => {
     const { vault, engine } = setup();
     vault.folders.add("Old");
     vault.files.set("Old/a.md", "A");
@@ -95,7 +95,7 @@ describe("SyncEngine incoming", () => {
     expect(await vault.read("Old/a.md")).toBeNull();
   });
 
-  it("снимок создаёт пустые папки из dirs", async () => {
+  it("snapshot creates empty folders from dirs", async () => {
     const { vault, engine } = setup();
     await engine.applySnapshot({
       v: PROTOCOL_VERSION,
@@ -113,7 +113,7 @@ describe("SyncEngine incoming", () => {
   it("test_remote_apply_suppresses_echo", async () => {
     const { transport, engine } = setup();
     await engine.applyIncoming({ op: "upsert", path: "a.md", content: "remote", hlc: hlc(1) });
-    // локальное событie modify того же файла с тем же содержимым — эхо, не должно слаться
+    // local modify event for the same file with the same content is an echo and should not be sent
     await engine.handleLocalUpsert("a.md");
     expect(transport.sent).toHaveLength(0);
   });

@@ -45,36 +45,36 @@ describe("SyncEngine per-file status (Spec-09)", () => {
     expect(events).toContainEqual({ path: "a.md", state: "pending" });
   });
 
-  it("локальный upsert → synced", async () => {
+  it("local upsert → synced", async () => {
     const { vault, engine, events } = setup();
     vault.files.set("a.md", "hi");
     await engine.handleLocalUpsert("a.md");
     expect(lastFor(events, "a.md")).toBe("synced");
   });
 
-  it("эхо upsert (без изменений) → synced", async () => {
+  it("echo upsert (no changes) → synced", async () => {
     const { vault, engine, events } = setup();
     vault.files.set("a.md", "hi");
     await engine.handleLocalUpsert("a.md");
-    await engine.handleLocalUpsert("a.md"); // второй раз — эхо
+    await engine.handleLocalUpsert("a.md"); // second time — echo
     expect(lastFor(events, "a.md")).toBe("synced");
   });
 
-  it("входящий upsert → synced", async () => {
+  it("incoming upsert → synced", async () => {
     const { engine, events } = setup();
     await engine.applyIncoming({ op: "upsert", path: "b.md", content: "x", hlc: hlc(1) });
     expect(lastFor(events, "b.md")).toBe("synced");
   });
 
-  it("вложение сверх лимита → error", async () => {
+  it("attachment over limit → error", async () => {
     const { vault, engine, events } = setup(true);
-    await engine.applySnapshot(snap(4)); // лимит 4 байта
+    await engine.applySnapshot(snap(4)); // limit 4 bytes
     await vault.writeBinary("big.bin", new Uint8Array([1, 2, 3, 4, 5]).buffer);
     await engine.handleLocalAttach("big.bin");
     expect(lastFor(events, "big.bin")).toBe("error");
   });
 
-  it("успешное вложение → synced", async () => {
+  it("successful attachment → synced", async () => {
     const { vault, engine, events } = setup(true);
     const data = new Uint8Array([9, 9]).buffer;
     await sha256Hex(data);

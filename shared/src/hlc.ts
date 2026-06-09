@@ -1,6 +1,3 @@
-// Hybrid Logical Clock — сортируемая строковая метка для упорядочивания изменений (LWW).
-// Формат: "<millis(15)>:<counter(6)>:<node>". Лексикографическое сравнение = хронологическое.
-
 export type Hlc = string;
 
 export type HlcParts = { millis: number; counter: number; node: string };
@@ -13,7 +10,6 @@ export const encodeHlc = ({ millis, counter, node }: HlcParts): Hlc =>
 
 export const compareHlc = (a: Hlc, b: Hlc): number => (a < b ? -1 : a > b ? 1 : 0);
 
-// Чистый шаг: следующая метка, монотонно растущая относительно prev и текущего времени.
 export const nextHlc = (prev: Hlc | null, nowMillis: number, node: string): Hlc => {
   const prevMillis = prev ? Number(prev.slice(0, MILLIS_WIDTH)) : 0;
   const prevCounter = prev
