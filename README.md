@@ -58,23 +58,22 @@ Notabeam keeps your Obsidian vault in sync across desktop and mobile, **in real 
 
 ## ⚖️ Why Notabeam
 
-You already have options. Here's an honest comparison:
+Compared with other self-hosted, community sync plugins:
 
-| | **Notabeam** | Self-hosted LiveSync | Remotely Save | Obsidian Sync |
-|---|:---:|:---:|:---:|:---:|
-| Real-time sync | ✅ | ✅ | ❌ scheduled | ✅ |
-| Self-host on **your** server | ✅ | ✅ | ➖ your cloud storage | ❌ |
-| Free | ✅ | ✅ | ✅ | ❌ subscription |
-| **No** CouchDB / object storage to run | ✅ | ❌ CouchDB | ❌ S3/cloud | ✅ managed |
-| Desktop + mobile | ✅ | ✅ | ✅ | ✅ |
-| Binary attachments (images, PDF…) | ✅ | ✅ | ✅ | ✅ |
-| End-to-end encryption | 🔜 (TLS today) | ✅ | ✅ | ✅ |
-| Managed cloud (no server to run) | 🔜 | ❌ | ❌ | ✅ |
-| AI / MCP access to your vault | 🔜 | ❌ | ❌ | ❌ |
+| | **Notabeam** | Self-hosted LiveSync | Remotely Save |
+|---|:---:|:---:|:---:|
+| Real-time sync | ✅ | ✅ | ❌ scheduled |
+| Self-host on **your** server | ✅ | ✅ | ➖ your cloud storage |
+| **No** CouchDB / object storage to run | ✅ | ❌ CouchDB | ❌ S3/cloud |
+| Desktop + mobile | ✅ | ✅ | ✅ |
+| Binary attachments (images, PDF…) | ✅ | ✅ | ✅ |
+| End-to-end encryption | 🔜 (TLS today) | ✅ | ✅ |
+| Managed cloud (no server to run) | 🔜 | ❌ | ❌ |
+| AI / MCP access to your vault | 🔜 | ❌ | ❌ |
 
 ✅ available · 🔜 on the [roadmap](#-project-status--roadmap) · ➖ partial. *We list what's coming as 🔜, not ✅ — see [project status](#-project-status--roadmap).*
 
-**The short version:** Notabeam is the only option that gives you real-time sync **and** a server you fully own **and** a setup that takes minutes — and it's heading toward managed cloud + AI access to your notes.
+**The short version:** Notabeam gives you real-time sync, a server you fully own, and a setup that takes minutes — and it's heading toward managed cloud and AI access to your notes.
 
 ## ✨ Highlights
 
