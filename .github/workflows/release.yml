@@ -1,0 +1,44 @@
+name: Release
+
+# Тег = версии из manifest.json (точь-в-точь, без префикса "v").
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+
+      - name: Verify tag matches manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$MANIFEST_VERSION" != "$TAG" ]; then
+            echo "Tag '$TAG' does not match manifest version '$MANIFEST_VERSION'"
+            exit 1
+          fi
+
+      - run: npm run build
+
+      - name: Create GitHub Release with plugin assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "Notabeam $TAG" \
+            main.js manifest.json

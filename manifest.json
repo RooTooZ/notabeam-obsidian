@@ -1,0 +1,10 @@
+{
+  "id": "notabeam",
+  "name": "Notabeam",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Sync your notes and attachments in real time across your devices through your Notabeam sync server.",
+  "author": "bezrutin",
+  "authorUrl": "https://notabeam.app",
+  "isDesktopOnly": false
+}
