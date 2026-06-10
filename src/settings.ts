@@ -24,6 +24,13 @@ export interface SyncPluginLike extends Plugin {
   restartSync(): void;
 }
 
+export function shouldShowOnboarding(settings: SyncSettings): boolean {
+  return !settings.vaultToken;
+}
+
+const INSTALL_COMMAND = "curl -fsSL https://notabeam.app/install.sh | bash";
+const GUIDE_URL = "https://notabeam.app/self-host";
+
 export class SyncSettingTab extends PluginSettingTab {
   constructor(
     app: App,
@@ -35,6 +42,15 @@ export class SyncSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    if (shouldShowOnboarding(this.plugin.settings)) {
+      const box = containerEl.createDiv();
+      box.createEl("h3", { text: t("onboarding.title") });
+      box.createEl("p", { text: t("onboarding.intro") });
+      box.createEl("pre").createEl("code", { text: INSTALL_COMMAND });
+      box.createEl("p", { text: t("onboarding.link") });
+      box.createEl("p").createEl("a", { text: t("onboarding.guide"), href: GUIDE_URL });
+    }
 
     new Setting(containerEl)
       .setName(t("settings.serverUrl.name"))
