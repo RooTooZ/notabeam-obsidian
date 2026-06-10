@@ -125,7 +125,7 @@ Markdown (`.md`), `.canvas`, `.excalidraw`, and binary **attachments** (images, 
 
 ## 🔧 How it works
 
-<!-- TODO(visual): архитектурная SVG-диаграмма (theme-aware): phone + desktop + Obsidian → WebSocket → Your Server (Postgres) → [MCP / Claude — coming soon, пунктиром]. -->
+<!-- TODO(visual): архитектурная SVG-диаграмма (theme-aware): phone + desktop + Obsidian → WebSocket → Your Server → [MCP / Claude — coming soon, пунктиром]. -->
 
 The plugin connects over **WebSocket** to the sync server **you configure** in settings. Notes and metadata travel over that connection, authenticated by a vault **token** and a **device id**. Binary **attachments** are transferred over **HTTP** at `/blob/<hash>` on the same server.
 
