@@ -84,11 +84,11 @@ Notabeam keeps your Obsidian vault in sync across desktop and mobile, **in real 
 curl -fsSL https://notabeam.app/install.sh | bash
 ```
 
-A 30-second wizard asks for your domain, verifies DNS, obtains a Let's Encrypt certificate (HTTPS/WSS, renewed automatically) and prints your **server URL** and a generated **vault token**. No reverse proxy, no database — a single binary with embedded SQLite. Prefer Docker, Kubernetes, or a LAN setup without a domain? See the **[self-hosting guide →](https://notabeam.app/self-host)**.
+A 30-second wizard asks for your domain, verifies DNS, obtains a Let's Encrypt certificate (HTTPS/WSS, renewed automatically) and prints your **server URL**, a generated **vault token**, a **one-click setup link** and a **QR code**. No reverse proxy, no database — a single binary with embedded SQLite. Prefer Docker, Kubernetes, or a LAN setup without a domain? See the **[self-hosting guide →](https://notabeam.app/self-host)**.
 
 **2. Install the plugin.** Install **Notabeam** from Obsidian's Community Plugins (or via BRAT / manually — see below).
 
-**3. Connect.** Open **Settings → Notabeam** and paste the **server URL** + **token** the wizard printed. Done — your notes sync across every device connected to that vault.
+**3. Connect.** Click the setup link on desktop — or scan the QR code from your phone — and confirm; the plugin configures itself. Or paste the **server URL** + **token** manually in **Settings → Notabeam**. Done — your notes sync across every device connected to that vault.
 
 > 🛈 **Don't want to run a server?** **Notabeam Cloud** — fully managed hosting, no setup — is coming soon. [Join the waitlist →](https://notabeam.app)
 

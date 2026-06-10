@@ -11,3 +11,17 @@ export class TFolder {
 export class Plugin {}
 export class PluginSettingTab {}
 export class Setting {}
+export class Modal {
+  static openedCount = 0;
+  constructor(public app: unknown) {}
+  open(): void {
+    Modal.openedCount += 1;
+  }
+  close(): void {}
+}
+export class Notice {
+  static messages: string[] = [];
+  constructor(message: string) {
+    Notice.messages.push(message);
+  }
+}

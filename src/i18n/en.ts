@@ -6,6 +6,19 @@ export const en = {
   "settings.confirmMerge.name": "Confirm merge",
   "settings.confirmMerge.desc":
     "Allow merging this non-empty vault with a non-empty server vault — only if it is the same vault.",
+  "setup.title": "Connect to sync server?",
+  "setup.message":
+    "This will set the sync server for this vault to {server} and replace the current token. Continue only if you opened this link or QR code from your own server setup.",
+  "setup.confirm": "Connect",
+  "setup.cancel": "Cancel",
+  "setup.applied": "Notabeam: connected to {server}.",
+  "setup.invalid": "Notabeam: invalid setup link.",
+  "onboarding.title": "Get started",
+  "onboarding.intro":
+    "This vault is not connected yet. Run your own sync server with one command on any Linux server:",
+  "onboarding.link":
+    "The setup wizard prints a setup link and a QR code — click the link on desktop, or scan the QR from your phone, and the plugin configures itself. You can also enter the server address and token below manually.",
+  "onboarding.guide": "Full self-hosting guide (Docker, Kubernetes, LAN) →",
   "binding.mismatch":
     "Notabeam: sync stopped. This vault is bound to {bound}…, but the server reported {server}…. Looks like the wrong server/token.",
   "binding.needConfirm":

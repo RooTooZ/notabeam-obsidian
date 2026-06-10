@@ -14,6 +14,7 @@ import {
 import { VaultWatcher } from "./sync/vault-watcher";
 import { WsTransport } from "./sync/ws-transport";
 import { FileBadges } from "./ui/file-badges";
+import { handleSetupUri } from "./ui/setup-link";
 import { STATUS_ICON, STATUS_KEY, transportToUi, type UiStatus } from "./ui/status";
 
 const FILE_STATE_KEY: Record<FileSyncState, "file.synced" | "file.pending" | "file.error"> = {
@@ -57,6 +58,7 @@ export default class NotabeamPlugin extends Plugin {
     this.statusEl.addClass("mod-clickable");
     this.statusEl.onClickEvent(() => this.openSettings());
     this.addSettingTab(new SyncSettingTab(this.app, this));
+    this.registerObsidianProtocolHandler("notabeam", (params) => handleSetupUri(this, params));
     if (Platform.isDesktop) {
       this.badges = new FileBadges((s) => t(FILE_STATE_KEY[s]));
       this.app.workspace.onLayoutReady(() => this.badges?.start());
