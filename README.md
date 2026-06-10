@@ -13,7 +13,7 @@
   <b>Edit on your laptop, see it on your phone — before you put it down.</b><br>
   Real-time, cross-platform sync for your notes, canvases, drawings and attachments,
   on a server <b>you own</b>.<br>
-  Self-host it free in minutes — no CouchDB, no S3 buckets, no cloud account.
+  Self-host it free with one command — no CouchDB, no S3 buckets, no cloud account.
 </p>
 
 <p align="center">
@@ -78,11 +78,17 @@ Notabeam keeps your Obsidian vault in sync across desktop and mobile, **in real 
 
 **Self-host, free, in three steps:**
 
-**1. Run the server.** Host the Notabeam server with Docker or a single binary. See the **[self-hosting guide →](https://notabeam.app)** for the exact command and options (VPS with automatic TLS, Kubernetes, or no public domain via a tunnel).
+**1. Run the server — one command.** On any Linux server with systemd:
 
-**2. Create a vault token.** Generate a token on your server — it scopes access to your vault.
+```bash
+curl -fsSL https://notabeam.app/install.sh | bash
+```
 
-**3. Install the plugin & connect.** Install **Notabeam** from Obsidian's Community Plugins, open **Settings → Notabeam**, and paste your **server URL** + **token**. Done — your notes sync across every device connected to that vault.
+A 30-second wizard asks for your domain, verifies DNS, obtains a Let's Encrypt certificate (HTTPS/WSS, renewed automatically) and prints your **server URL** and a generated **vault token**. No reverse proxy, no database — a single binary with embedded SQLite. Prefer Docker, Kubernetes, or a LAN setup without a domain? See the **[self-hosting guide →](https://notabeam.app/self-host)**.
+
+**2. Install the plugin.** Install **Notabeam** from Obsidian's Community Plugins (or via BRAT / manually — see below).
+
+**3. Connect.** Open **Settings → Notabeam** and paste the **server URL** + **token** the wizard printed. Done — your notes sync across every device connected to that vault.
 
 > 🛈 **Don't want to run a server?** **Notabeam Cloud** — fully managed hosting, no setup — is coming soon. [Join the waitlist →](https://notabeam.app)
 
