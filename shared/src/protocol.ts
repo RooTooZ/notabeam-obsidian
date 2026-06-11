@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PathSchema } from "./path";
+
 export const PROTOCOL_VERSION = 1;
 
 export const HlcSchema = z.string().min(1);
@@ -9,25 +11,25 @@ export const isTextSyncedPath = (path: string): boolean =>
   TEXT_SYNC_EXTENSIONS.some((ext) => path.endsWith(ext));
 
 export const DeltaSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("upsert"), path: z.string().min(1), content: z.string(), hlc: HlcSchema }),
-  z.object({ op: z.literal("delete"), path: z.string().min(1), hlc: HlcSchema }),
+  z.object({ op: z.literal("upsert"), path: PathSchema, content: z.string(), hlc: HlcSchema }),
+  z.object({ op: z.literal("delete"), path: PathSchema, hlc: HlcSchema }),
   z.object({
     op: z.literal("rename"),
-    fromPath: z.string().min(1),
-    toPath: z.string().min(1),
+    fromPath: PathSchema,
+    toPath: PathSchema,
     hlc: HlcSchema,
   }),
-  z.object({ op: z.literal("mkdir"), path: z.string().min(1), hlc: HlcSchema }),
-  z.object({ op: z.literal("rmdir"), path: z.string().min(1), hlc: HlcSchema }),
+  z.object({ op: z.literal("mkdir"), path: PathSchema, hlc: HlcSchema }),
+  z.object({ op: z.literal("rmdir"), path: PathSchema, hlc: HlcSchema }),
   z.object({
     op: z.literal("renamedir"),
-    fromPath: z.string().min(1),
-    toPath: z.string().min(1),
+    fromPath: PathSchema,
+    toPath: PathSchema,
     hlc: HlcSchema,
   }),
   z.object({
     op: z.literal("attach"),
-    path: z.string().min(1),
+    path: PathSchema,
     hash: z.string().min(1),
     size: z.number().int().nonnegative(),
     hlc: HlcSchema,

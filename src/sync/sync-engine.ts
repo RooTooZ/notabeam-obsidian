@@ -1,7 +1,9 @@
 import {
   compareHlc,
   DEFAULT_MAX_ATTACHMENT_BYTES,
+  isSyncablePath,
   isTextSyncedPath,
+  normalizePath,
   PROTOCOL_VERSION,
   sha256Hex,
   type Delta,
@@ -17,6 +19,15 @@ import type { VaultPort } from "./vault-port";
 type ShadowEntry = { hlc: string; content: string | null };
 type DirEntry = { hlc: string; exists: boolean };
 type AttachEntry = { hlc: string; hash: string | null };
+
+// Защита границы доверия: входящая дельта от сервера не должна писать вне vault
+// или в `.obsidian/` (= RCE). Проверяем оба конца rename/renamedir.
+const deltaPathSafe = (delta: Delta): boolean => {
+  if (delta.op === "rename" || delta.op === "renamedir") {
+    return isSyncablePath(delta.fromPath) && isSyncablePath(delta.toPath);
+  }
+  return isSyncablePath(delta.path);
+};
 
 const conflictPath = (path: string, hlc: string): string => {
   const tag = ` (conflict ${hlc.replace(/[:.]/g, "-")})`;
@@ -111,30 +122,42 @@ export class SyncEngine {
     if (!(await this.checkBinding(msg))) return;
     this.maxAttachmentBytes = msg.maxAttachmentBytes;
     for (const d of [...msg.dirs].sort((a, b) => a.path.length - b.path.length)) {
+      const path = normalizePath(d.path);
+      if (!isSyncablePath(path)) continue; // поэлементно: один плохой путь не рушит весь снапшот
       this.hlc.observe(d.hlc);
-      const cur = this.dirShadow.get(d.path);
+      const cur = this.dirShadow.get(path);
       if (cur && compareHlc(d.hlc, cur.hlc) <= 0) continue;
-      this.dirShadow.set(d.path, { hlc: d.hlc, exists: true });
-      await this.port.createDir(d.path);
+      this.dirShadow.set(path, { hlc: d.hlc, exists: true });
+      await this.port.createDir(path);
     }
     for (const f of msg.files) {
+      const path = normalizePath(f.path);
+      if (!isSyncablePath(path)) continue;
       this.hlc.observe(f.hlc);
-      const cur = this.shadow.get(f.path);
+      const cur = this.shadow.get(path);
       if (cur && compareHlc(f.hlc, cur.hlc) <= 0) continue;
-      this.shadow.set(f.path, { hlc: f.hlc, content: f.content });
-      await this.port.write(f.path, f.content);
-      this.status(f.path, "synced");
+      this.shadow.set(path, { hlc: f.hlc, content: f.content });
+      await this.port.write(path, f.content);
+      this.status(path, "synced");
     }
     for (const a of msg.attachments) {
+      const path = normalizePath(a.path);
+      if (!isSyncablePath(path)) continue;
       this.hlc.observe(a.hlc);
-      const cur = this.attachShadow.get(a.path);
+      const cur = this.attachShadow.get(path);
       if (cur && compareHlc(a.hlc, cur.hlc) <= 0) continue;
-      this.attachShadow.set(a.path, { hlc: a.hlc, hash: a.hash });
-      await this.ensureLocalAttachment(a.path, a.hash);
-      this.status(a.path, "synced");
+      this.attachShadow.set(path, { hlc: a.hlc, hash: a.hash });
+      await this.ensureLocalAttachment(path, a.hash);
+      this.status(path, "synced");
     }
-    for (const t of msg.tombstones) this.hlc.observe(t.hlc);
-    await this.reconcileLocal(new Set(msg.tombstones.map((t) => t.path)));
+    const tombstoned = new Set<string>();
+    for (const t of msg.tombstones) {
+      const path = normalizePath(t.path);
+      if (!isSyncablePath(path)) continue;
+      this.hlc.observe(t.hlc);
+      tombstoned.add(path);
+    }
+    await this.reconcileLocal(tombstoned);
   }
 
   private async reconcileLocal(tombstoned: Set<string>): Promise<void> {
@@ -184,6 +207,7 @@ export class SyncEngine {
 
   async applyIncoming(delta: Delta): Promise<void> {
     if (this.halted) return;
+    if (!deltaPathSafe(delta)) return; // defense-in-depth: не доверяем серверу/чужому клиенту
     this.hlc.observe(delta.hlc);
 
     if (delta.op === "mkdir") {

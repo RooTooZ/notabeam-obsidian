@@ -1,4 +1,4 @@
-import { isTextSyncedPath } from "@notabeam/shared";
+import { isSyncablePath, isTextSyncedPath } from "@notabeam/shared";
 import { TFile, TFolder, type Vault } from "obsidian";
 
 import type { VaultFile, VaultPort } from "./vault-port";
@@ -9,7 +9,7 @@ export class ObsidianVault implements VaultPort {
   async list(): Promise<VaultFile[]> {
     const files = this.vault
       .getFiles()
-      .filter((f) => isTextSyncedPath(f.path) && !f.path.startsWith(".obsidian/"));
+      .filter((f) => isTextSyncedPath(f.path) && isSyncablePath(f.path));
     const out: VaultFile[] = [];
     for (const f of files) {
       out.push({ path: f.path, content: await this.vault.read(f) });
@@ -81,7 +81,7 @@ export class ObsidianVault implements VaultPort {
     return this.vault
       .getFiles()
       .map((f) => f.path)
-      .filter((p) => !isTextSyncedPath(p) && p !== ".obsidian" && !p.startsWith(".obsidian/"));
+      .filter((p) => !isTextSyncedPath(p) && isSyncablePath(p));
   }
 
   async createDir(path: string): Promise<void> {
