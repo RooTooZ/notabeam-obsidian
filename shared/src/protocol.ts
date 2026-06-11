@@ -4,6 +4,9 @@ import { PathSchema } from "./path";
 
 export const PROTOCOL_VERSION = 1;
 
+// Верхняя граница текстовой заметки (защита от гигабайтной дельты в SQLite/broadcast).
+export const MAX_CONTENT_LENGTH = 5 * 1024 * 1024;
+
 // Формат HLC: millis(15):counter(6):node — фиксированная ширина для лексикографического
 // сравнения. Regex отсекает poison-HLC (напр. "~"), ломающий LWW и генератор часов.
 export const HlcSchema = z.string().regex(/^\d{15}:\d{6}:[A-Za-z0-9_-]{1,64}$/);
@@ -13,7 +16,7 @@ export const isTextSyncedPath = (path: string): boolean =>
   TEXT_SYNC_EXTENSIONS.some((ext) => path.endsWith(ext));
 
 export const DeltaSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("upsert"), path: PathSchema, content: z.string(), hlc: HlcSchema }),
+  z.object({ op: z.literal("upsert"), path: PathSchema, content: z.string().max(MAX_CONTENT_LENGTH), hlc: HlcSchema }),
   z.object({ op: z.literal("delete"), path: PathSchema, hlc: HlcSchema }),
   z.object({
     op: z.literal("rename"),
