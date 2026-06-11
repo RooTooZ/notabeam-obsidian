@@ -119,7 +119,7 @@ export default class NotabeamPlugin extends Plugin {
       return;
     }
 
-    const port = new ObsidianVault(this.app.vault);
+    const port = new ObsidianVault(this.app.vault, this.app.workspace);
     const transport = new WsTransport(
       this.settings.serverUrl,
       this.settings.vaultToken,

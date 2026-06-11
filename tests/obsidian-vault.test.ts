@@ -192,4 +192,27 @@ describe("ObsidianVault (VaultPort adapter over the Obsidian Vault API)", () => 
     const list = (await port.listAttachments()).sort();
     expect(list).toEqual(["doc.pdf", "img.png"]);
   });
+
+  // AUD-014: сброс открытого редактора только для совпадающего пути; без workspace — no-op.
+  it("flushOpenBuffer saves the open editor for the matching path only", async () => {
+    const saved: string[] = [];
+    const leaf = (p: string) => ({
+      view: {
+        file: { path: p },
+        save: async () => {
+          saved.push(p);
+        },
+      },
+    });
+    const workspace = {
+      getLeavesOfType: (type: string) => (type === "markdown" ? [leaf("open.md"), leaf("other.md")] : []),
+    };
+    const withWs = new ObsidianVault(vault as unknown as Vault, workspace);
+    await withWs.flushOpenBuffer("open.md");
+    expect(saved).toEqual(["open.md"]);
+
+    // без workspace метод безопасен (no-op)
+    await port.flushOpenBuffer("open.md");
+    expect(saved).toEqual(["open.md"]);
+  });
 });

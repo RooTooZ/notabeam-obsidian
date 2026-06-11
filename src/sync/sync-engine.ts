@@ -227,6 +227,7 @@ export class SyncEngine {
       this.hlc.observe(f.hlc);
       const cur = this.shadow.get(path);
       if (cur && compareHlc(f.hlc, cur.hlc) <= 0) continue;
+      await this.port.flushOpenBuffer?.(path); // AUD-014: сбросить буфер редактора
       const incomingHash = await textHash(f.content);
       // AUD-011: на snapshot-пути локальная правка тоже не теряется молча
       await this.maybeConflictCopy(path, incomingHash, f.hlc, cur?.hash ?? null);
@@ -404,6 +405,9 @@ export class SyncEngine {
     if (cur && compareHlc(delta.hlc, cur.hlc) <= 0) return;
 
     if (delta.op === "upsert") {
+      // AUD-014: слить несохранённый буфер открытого редактора на диск ДО перезаписи —
+      // тогда maybeConflictCopy увидит правку пользователя и сохранит её конфликт-копией.
+      await this.port.flushOpenBuffer?.(delta.path);
       const incomingHash = await textHash(delta.content);
       await this.maybeConflictCopy(delta.path, incomingHash, delta.hlc, cur?.hash ?? null);
       await this.port.write(delta.path, delta.content);

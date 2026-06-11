@@ -76,6 +76,43 @@ describe("SyncEngine conflict copies (REQ-02.8)", () => {
     expect(await vault.read(conflict!)).toBe("local-only");
   });
 
+  // MS11-009 / AUD-014: несохранённый буфер открытого редактора не теряется при
+  // входящей перезаписи — flushOpenBuffer сбрасывает его на диск, и он уходит в копию.
+  it("flushes a dirty editor buffer into a conflict copy before overwrite", async () => {
+    class EditorVault extends InMemoryVault {
+      readonly buffers = new Map<string, string>();
+      async flushOpenBuffer(path: string): Promise<void> {
+        const buf = this.buffers.get(path);
+        if (buf !== undefined) {
+          this.files.set(path, buf);
+          this.buffers.delete(path);
+        }
+      }
+    }
+    const vault = new EditorVault();
+    const transport = new FakeTransport();
+    let last: string | null = null;
+    let t = 0;
+    const gen = createHlcGenerator({
+      node: "dev",
+      clock: { now: () => (t += 1) },
+      load: () => last,
+      save: (h) => (last = h),
+    });
+    const engine = new SyncEngine(vault, transport, gen);
+
+    await engine.applySnapshot(snap([{ path: "note.md", content: "base", hlc: hlc(1) }]));
+    // пользователь печатает: буфер ещё не сохранён на диск (на диске "base")
+    vault.buffers.set("note.md", "unsaved buffer");
+
+    await engine.applyIncoming({ op: "upsert", path: "note.md", content: "remote", hlc: hlc(5) });
+
+    expect(await vault.read("note.md")).toBe("remote");
+    const conflict = [...vault.files.keys()].find((p) => p.includes("(conflict"));
+    expect(conflict).toBeTruthy();
+    expect(await vault.read(conflict!)).toBe("unsaved buffer");
+  });
+
   it("works for .canvas", async () => {
     const { vault, engine } = setup();
     await engine.applySnapshot(snap([{ path: "b.canvas", content: "{}", hlc: hlc(1) }]));

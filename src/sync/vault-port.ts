@@ -14,4 +14,7 @@ export interface VaultPort {
   readBinary(path: string): Promise<ArrayBuffer | null>;
   writeBinary(path: string, data: ArrayBuffer): Promise<void>;
   listAttachments(): Promise<string[]>;
+  // Слить несохранённый буфер открытого редактора на диск перед перезаписью (AUD-014).
+  // Опционально: в тестах/окружениях без редактора не реализуется.
+  flushOpenBuffer?(path: string): Promise<void>;
 }

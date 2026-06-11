@@ -3,8 +3,29 @@ import { TFile, TFolder, type Vault } from "obsidian";
 
 import type { VaultFile, VaultPort } from "./vault-port";
 
+// Минимальная структурная форма того, что нужно для сброса буфера редактора (AUD-014) —
+// чтобы не тянуть и не мокать весь Workspace/MarkdownView. view сужаем в рантайме.
+type WorkspaceLike = { getLeavesOfType(type: string): { view: unknown }[] };
+type FlushableView = { file?: { path: string } | null; save?: () => Promise<void> };
+
 export class ObsidianVault implements VaultPort {
-  constructor(private readonly vault: Vault) {}
+  constructor(
+    private readonly vault: Vault,
+    private readonly workspace?: WorkspaceLike,
+  ) {}
+
+  // Перед перезаписью входящей дельтой принудительно сохраняем открытый редактор этого
+  // файла: иначе vault.modify затрёт несохранённый буфер пользователя без следа (AUD-014).
+  // Best-effort: ошибки сохранения не должны срывать применение дельты.
+  async flushOpenBuffer(path: string): Promise<void> {
+    if (!this.workspace) return;
+    for (const leaf of this.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view as FlushableView;
+      if (view?.file?.path === path && typeof view.save === "function") {
+        await view.save().catch(() => undefined);
+      }
+    }
+  }
 
   async list(): Promise<VaultFile[]> {
     const files = this.vault
