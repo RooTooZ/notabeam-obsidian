@@ -22,6 +22,10 @@ import type { VaultPort } from "./vault-port";
 export type ShadowEntry = { hlc: string; hash: string | null };
 type DirEntry = { hlc: string; exists: boolean };
 type AttachEntry = { hlc: string; hash: string | null };
+// Как обновить confirmed-базу при ack локальной отправки (AUD-004).
+type ConfirmAction =
+  | { kind: "set"; path: string; hash: string | null }
+  | { kind: "rename"; from: string; to: string; hash: string | null };
 
 const textHash = (s: string): Promise<string> => sha256Hex(new TextEncoder().encode(s));
 
@@ -75,6 +79,12 @@ export class SyncEngine {
   private shadow = new Map<string, ShadowEntry>();
   private dirShadow = new Map<string, DirEntry>();
   private attachShadow = new Map<string, AttachEntry>();
+  // Последний контент, который сервер ПОДТВЕРДИЛ для пути (хэш; null = подтверждённо
+  // удалён). База для конфликт-копий (AUD-004): отличает «подтверждено сервером» от
+  // «отправлено, но не подтверждено» — оптимистичный shadow для этого не годится.
+  private confirmed = new Map<string, string | null>();
+  // Локальные отправки в ожидании ack (hlc → как обновить confirmed при подтверждении).
+  private pendingByHlc = new Map<string, ConfirmAction>();
   private halted = false;
   private maxAttachmentBytes = DEFAULT_MAX_ATTACHMENT_BYTES;
   // Привязка vault подтверждена в рамках текущего соединения (через snapshot/ops с vaultId).
@@ -155,8 +165,38 @@ export class SyncEngine {
     await this.chain;
   }
 
+  // confirmed-база обновляется на server-receive (входящие/snapshot) и на ack локальной
+  // отправки — это и есть «подтверждённый сервером» baseline для конфликт-копий (AUD-004).
+  private applyConfirm(a: ConfirmAction): void {
+    if (a.kind === "set") this.confirmed.set(a.path, a.hash);
+    else {
+      this.confirmed.set(a.to, a.hash);
+      this.confirmed.set(a.from, null);
+    }
+  }
+
+  private recordPending(hlc: string, a: ConfirmAction): void {
+    this.pendingByHlc.set(hlc, a);
+  }
+
+  // База для конфликт-копий: подтверждённый сервером контент, если он известен в этой
+  // сессии (AUD-004); иначе — persisted shadow (на чистом рестарте без потерянных
+  // отправок он = последнему синхронизированному, ложных копий не создаёт).
+  private baselineHash(path: string): string | null {
+    const c = this.confirmed.get(path);
+    if (c !== undefined) return c;
+    return this.shadow.get(path)?.hash ?? null;
+  }
+
   private async onServerMessage(msg: ServerMessage): Promise<void> {
-    if (msg.type === "ack") return; // ack обрабатывается на уровне транспорта
+    if (msg.type === "ack") {
+      const a = this.pendingByHlc.get(msg.hlc);
+      if (a) {
+        this.applyConfirm(a); // сервер подтвердил нашу отправку — это новый baseline
+        this.pendingByHlc.delete(msg.hlc);
+      }
+      return;
+    }
     if (msg.type === "snapshot") {
       await this.applySnapshot(msg);
       if (!this.halted) {
@@ -229,10 +269,12 @@ export class SyncEngine {
       if (cur && compareHlc(f.hlc, cur.hlc) <= 0) continue;
       await this.port.flushOpenBuffer?.(path); // AUD-014: сбросить буфер редактора
       const incomingHash = await textHash(f.content);
-      // AUD-011: на snapshot-пути локальная правка тоже не теряется молча
-      await this.maybeConflictCopy(path, incomingHash, f.hlc, cur?.hash ?? null);
+      // AUD-011/AUD-004: на snapshot-пути локальная правка не теряется молча; baseline —
+      // подтверждённый сервером контент, а не оптимистичный shadow.
+      await this.maybeConflictCopy(path, incomingHash, f.hlc, this.baselineHash(path));
       await this.port.write(path, f.content);
       this.setShadow(path, { hlc: f.hlc, hash: incomingHash });
+      this.confirmed.set(path, incomingHash); // сервер подтвердил этот контент
       this.status(path, "synced");
     }
     for (const a of msg.attachments) {
@@ -409,17 +451,22 @@ export class SyncEngine {
       // тогда maybeConflictCopy увидит правку пользователя и сохранит её конфликт-копией.
       await this.port.flushOpenBuffer?.(delta.path);
       const incomingHash = await textHash(delta.content);
-      await this.maybeConflictCopy(delta.path, incomingHash, delta.hlc, cur?.hash ?? null);
+      // AUD-004: baseline — подтверждённый сервером контент, не оптимистичный shadow.
+      await this.maybeConflictCopy(delta.path, incomingHash, delta.hlc, this.baselineHash(delta.path));
       await this.port.write(delta.path, delta.content);
       this.setShadow(delta.path, { hlc: delta.hlc, hash: incomingHash });
+      this.confirmed.set(delta.path, incomingHash);
       this.status(delta.path, "synced");
     } else if (delta.op === "delete") {
       await this.port.trash(delta.path);
       this.setShadow(delta.path, { hlc: delta.hlc, hash: null });
+      this.confirmed.set(delta.path, null);
     } else {
       await this.port.rename(delta.fromPath, delta.toPath);
       this.setShadow(delta.toPath, { hlc: delta.hlc, hash: cur?.hash ?? null });
       this.setShadow(delta.fromPath, { hlc: delta.hlc, hash: null });
+      this.confirmed.set(delta.toPath, this.confirmed.get(delta.fromPath) ?? cur?.hash ?? null);
+      this.confirmed.set(delta.fromPath, null);
       this.status(delta.toPath, "synced");
     }
   }
@@ -437,6 +484,7 @@ export class SyncEngine {
     }
     const hlc = this.hlc.next();
     this.setShadow(path, { hlc, hash });
+    this.recordPending(hlc, { kind: "set", path, hash }); // confirmed обновится по ack
     this.transport.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "upsert", path, content, hlc } });
     this.status(path, "synced");
   }
@@ -451,6 +499,7 @@ export class SyncEngine {
     if (!cur || cur.hash === null) return;
     const hlc = this.hlc.next();
     this.setShadow(path, { hlc, hash: null });
+    this.recordPending(hlc, { kind: "set", path, hash: null });
     this.transport.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path, hlc } });
   }
 
@@ -477,6 +526,7 @@ export class SyncEngine {
     if (cur && cur.hash !== null) {
       this.setShadow(to, { hlc, hash: cur.hash });
       this.setShadow(from, { hlc, hash: null });
+      this.recordPending(hlc, { kind: "rename", from, to, hash: cur.hash });
       this.transport.send({
         v: PROTOCOL_VERSION,
         type: "delta",
@@ -486,7 +536,9 @@ export class SyncEngine {
     }
     const content = await this.port.read(to);
     if (content === null) return;
-    this.setShadow(to, { hlc, hash: await textHash(content) });
+    const hash = await textHash(content);
+    this.setShadow(to, { hlc, hash });
+    this.recordPending(hlc, { kind: "set", path: to, hash });
     this.transport.send({
       v: PROTOCOL_VERSION,
       type: "delta",

@@ -82,10 +82,9 @@ export class WsTransport implements Transport {
         }
         const msg = ServerMessageSchema.safeParse(parsed);
         if (!msg.success) return;
-        if (msg.data.type === "ack") {
-          this.unacked.delete(msg.data.hlc); // ack обрабатывается транспортом, не доходит до движка
-          return;
-        }
+        // ack снимает дельту с переотправки (транспорт) И доходит до движка: он отмечает
+        // путь как подтверждённый сервером — baseline для конфликт-копий (AUD-004).
+        if (msg.data.type === "ack") this.unacked.delete(msg.data.hlc);
         this.messageHandler(msg.data);
       },
       opts,
