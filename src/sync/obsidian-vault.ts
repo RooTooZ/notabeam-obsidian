@@ -95,15 +95,8 @@ export class ObsidianVault implements VaultPort {
   async removeDir(path: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(path);
     if (f === null) return;
-    if (!(f instanceof TFolder)) {
-      await this.vault.delete(f, true);
-      return;
-    }
-    for (const child of [...f.children]) {
-      if (child instanceof TFolder) await this.removeDir(child.path);
-      else await this.vault.delete(child, true);
-    }
-    await this.vault.delete(f, true);
+    // в корзину (.trash) одним вызовом — обратимо (REQ-02.7), а не vault.delete(force) навсегда
+    await this.vault.trash(f, false);
   }
 
   async moveDir(from: string, to: string): Promise<void> {
@@ -117,13 +110,17 @@ export class ObsidianVault implements VaultPort {
         else await this.vault.rename(child, target).catch(() => undefined);
       }
       const left = this.vault.getAbstractFileByPath(from);
-      if (left !== null) await this.vault.delete(left, true).catch(() => undefined);
+      // удаляем исходную папку ТОЛЬКО если пуста — непереносимые (коллизия имён) дети
+      // остаются на месте, не теряются; удаление — в корзину, не навсегда
+      if (left instanceof TFolder && left.children.length === 0) {
+        await this.vault.trash(left, false).catch(() => undefined);
+      }
       return;
     }
     const parent = to.split("/").slice(0, -1).join("/");
     if (parent && this.vault.getAbstractFileByPath(parent) === null) {
       await this.vault.createFolder(parent).catch(() => undefined);
     }
-    await this.vault.rename(src, to);
+    await this.vault.rename(src, to).catch(() => undefined);
   }
 }

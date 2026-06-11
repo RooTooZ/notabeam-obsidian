@@ -152,7 +152,7 @@ describe("ObsidianVault (VaultPort adapter over the Obsidian Vault API)", () => 
     expect(vault.folders.has("Empty")).toBe(true);
   });
 
-  it("removeDir recursively deletes a folder with its contents", async () => {
+  it("removeDir moves a folder with its contents to trash (reversible)", async () => {
     vault.folders.add("F");
     vault.folders.add("F/sub");
     vault.files.set("F/a.md", "A");
@@ -161,6 +161,7 @@ describe("ObsidianVault (VaultPort adapter over the Obsidian Vault API)", () => 
     expect(vault.folders.has("F")).toBe(false);
     expect(vault.files.has("F/a.md")).toBe(false);
     expect(vault.files.has("F/sub/b.md")).toBe(false);
+    expect(vault.trashed).toContain("F"); // через vault.trash, не безвозвратный delete(force)
   });
 
   // --- Binary attachments (Spec-03, REQ-03.3 adapter) ---
