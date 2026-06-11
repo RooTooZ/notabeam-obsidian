@@ -65,6 +65,9 @@ export class SyncEngine {
   // Привязка vault подтверждена в рамках текущего соединения (через snapshot/ops с vaultId).
   // До подтверждения не применяем live-дельты (не несут vaultId) — защита от чужого сервера.
   private connectionVerified = false;
+  // FIFO-очередь обработки входящих: гарантирует строгий порядок (без реордера записей
+  // по одному пути) и непрерывное продвижение курсора.
+  private chain: Promise<void> = Promise.resolve();
 
   private cursor = 0;
 
@@ -95,7 +98,9 @@ export class SyncEngine {
 
   start(): void {
     this.cursor = this.cursorStore?.load() ?? 0;
-    this.transport.onMessage((msg) => void this.onServerMessage(msg));
+    this.transport.onMessage((msg) => {
+      this.chain = this.chain.then(() => this.onServerMessage(msg)).catch(() => undefined);
+    });
     this.transport.onOpen(() => {
       this.connectionVerified = false;
     });
@@ -120,7 +125,11 @@ export class SyncEngine {
       if (!this.verifyVaultId(msg.vaultId)) return;
       this.connectionVerified = true;
       for (const e of msg.deltas) {
-        await this.applyIncoming(e.delta);
+        try {
+          await this.applyIncoming(e.delta);
+        } catch {
+          return; // не продвигать курсор за упавший seq — докачается при reconnect
+        }
         this.setCursor(e.seq);
       }
       return;
@@ -305,16 +314,16 @@ export class SyncEngine {
       if (local !== null && local !== delta.content && local !== (cur?.content ?? null)) {
         await this.port.write(conflictPath(delta.path, delta.hlc), local);
       }
-      this.shadow.set(delta.path, { hlc: delta.hlc, content: delta.content });
       await this.port.write(delta.path, delta.content);
+      this.shadow.set(delta.path, { hlc: delta.hlc, content: delta.content });
       this.status(delta.path, "synced");
     } else if (delta.op === "delete") {
-      this.shadow.set(delta.path, { hlc: delta.hlc, content: null });
       await this.port.trash(delta.path);
+      this.shadow.set(delta.path, { hlc: delta.hlc, content: null });
     } else {
+      await this.port.rename(delta.fromPath, delta.toPath);
       this.shadow.set(delta.toPath, { hlc: delta.hlc, content: cur?.content ?? null });
       this.shadow.set(delta.fromPath, { hlc: delta.hlc, content: null });
-      await this.port.rename(delta.fromPath, delta.toPath);
       this.status(delta.toPath, "synced");
     }
   }
