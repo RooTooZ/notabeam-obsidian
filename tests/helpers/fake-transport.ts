@@ -2,8 +2,12 @@ import type { ClientMessage, ServerMessage } from "@notabeam/shared";
 
 import type { Transport } from "@/sync/transport";
 
+// Движок отправляет только delta-сообщения (auth — внутреннее дело WsTransport),
+// поэтому sent типизирован как массив дельт — тесты обращаются к .delta напрямую.
+type SentDelta = Extract<ClientMessage, { type: "delta" }>;
+
 export class FakeTransport implements Transport {
-  readonly sent: ClientMessage[] = [];
+  readonly sent: SentDelta[] = [];
   connected = false;
   private messageHandler: (msg: ServerMessage) => void = () => undefined;
 
@@ -16,7 +20,7 @@ export class FakeTransport implements Transport {
   }
 
   send(msg: ClientMessage): void {
-    this.sent.push(msg);
+    if (msg.type === "delta") this.sent.push(msg);
   }
 
   onMessage(handler: (msg: ServerMessage) => void): void {

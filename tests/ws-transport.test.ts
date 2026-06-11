@@ -69,6 +69,15 @@ describe("WsTransport invalid URL", () => {
   });
 });
 
+// первый серверный ответ = подтверждение auth → транспорт начинает слать дельты
+const authOk = (ws: FakeWS): void =>
+  ws.emit("message", {
+    data: JSON.stringify({ v: PROTOCOL_VERSION, type: "snapshot", files: [], vaultId: "v1" }),
+  });
+// исходящие дельты, без auth-сообщения
+const deltasOf = (ws: FakeWS): unknown[] =>
+  ws.sent.map((s) => JSON.parse(s)).filter((m: { type: string }) => m.type === "delta");
+
 describe("WsTransport reconnect", () => {
   it("test_reconnects_after_close", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);
@@ -79,6 +88,17 @@ describe("WsTransport reconnect", () => {
     expect(FakeWS.instances).toHaveLength(2);
   });
 
+  // AUD-023: токена нет в URL; первым на open уходит auth-сообщение.
+  it("test_auth_message_first_no_token_in_url", () => {
+    const t = new WsTransport("ws://x", "tok", "dev", factory);
+    t.connect();
+    const ws = FakeWS.instances[0]!;
+    expect(ws.url).toBe("ws://x/sync"); // без ?token=
+    ws.emit("open");
+    const first = JSON.parse(ws.sent[0]!);
+    expect(first).toMatchObject({ type: "auth", token: "tok", device: "dev" });
+  });
+
   // MS11-008 / AUD-010: дельта, отправленная но не подтверждённая (умирающий сокет),
   // переотправляется на reconnect; подтверждённая (ack) — нет.
   it("test_unacked_delta_resent_on_reconnect", () => {
@@ -87,13 +107,15 @@ describe("WsTransport reconnect", () => {
     t.connect();
     const ws1 = FakeWS.instances[0]!;
     ws1.emit("open");
+    authOk(ws1);
     t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "x.md", hlc } });
-    expect(ws1.sent).toHaveLength(1);
+    expect(deltasOf(ws1)).toHaveLength(1);
     ws1.emit("close");
     vi.advanceTimersByTime(1500);
     const ws2 = FakeWS.instances[1]!;
     ws2.emit("open");
-    expect(ws2.sent).toHaveLength(1); // переотправлено (ack не приходил)
+    authOk(ws2);
+    expect(deltasOf(ws2)).toHaveLength(1); // переотправлено (ack не приходил)
   });
 
   it("test_acked_delta_not_resent_on_reconnect", () => {
@@ -102,13 +124,15 @@ describe("WsTransport reconnect", () => {
     t.connect();
     const ws1 = FakeWS.instances[0]!;
     ws1.emit("open");
+    authOk(ws1);
     t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "x.md", hlc } });
     ws1.emit("message", { data: JSON.stringify({ v: PROTOCOL_VERSION, type: "ack", hlc }) });
     ws1.emit("close");
     vi.advanceTimersByTime(1500);
     const ws2 = FakeWS.instances[1]!;
     ws2.emit("open");
-    expect(ws2.sent).toHaveLength(0); // acked → не переотправлено
+    authOk(ws2);
+    expect(deltasOf(ws2)).toHaveLength(0); // acked → не переотправлено
   });
 
   it("test_stop_cancels_reconnect", () => {
@@ -120,26 +144,31 @@ describe("WsTransport reconnect", () => {
     expect(FakeWS.instances).toHaveLength(1);
   });
 
-  it("test_offline_send_is_queued_and_flushed_on_open", () => {
+  it("test_offline_send_is_queued_then_flushed_after_auth", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);
     t.connect();
     const ws = FakeWS.instances[0]!;
-    // socket is not open yet (readyState=0) → send should be queued, not lost
+    // socket not open yet (readyState=0) → send should be queued, not lost
     t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "off.md", hlc: "h" } });
-    expect(ws.sent).toHaveLength(0);
-    // connection opened → the queue is flushed
+    expect(deltasOf(ws)).toHaveLength(0);
+    // open → уходит только auth-сообщение; дельта ждёт auth-ok
     ws.emit("open");
-    expect(ws.sent).toHaveLength(1);
-    expect(JSON.parse(ws.sent[0]!).delta.path).toBe("off.md");
+    expect(deltasOf(ws)).toHaveLength(0);
+    // первый серверный ответ (auth-ok) → очередь дельт сбрасывается
+    authOk(ws);
+    const sent = deltasOf(ws) as { delta: { path: string } }[];
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.delta.path).toBe("off.md");
   });
 
-  it("test_send_when_open_goes_immediately", () => {
+  it("test_send_after_auth_goes_immediately", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);
     t.connect();
     const ws = FakeWS.instances[0]!;
     ws.emit("open");
+    authOk(ws);
     t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "x.md", hlc: "h" } });
-    expect(ws.sent).toHaveLength(1);
+    expect(deltasOf(ws)).toHaveLength(1);
   });
 
   it("test_no_listener_leak_on_reconnect", () => {

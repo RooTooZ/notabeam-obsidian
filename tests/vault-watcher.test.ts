@@ -1,4 +1,4 @@
-import { encodeHlc, type ClientMessage } from "@notabeam/shared";
+import { encodeHlc } from "@notabeam/shared";
 import { describe, expect, it } from "vitest";
 
 import { createHlcGenerator } from "@/sync/hlc";
@@ -29,8 +29,7 @@ const setup = () => {
   return { vault, transport, engine, watcher };
 };
 
-const deltas = (transport: FakeTransport) =>
-  transport.sent.map((m: ClientMessage) => m.delta);
+const deltas = (transport: FakeTransport) => transport.sent.map((m) => m.delta);
 
 describe("VaultWatcher outgoing", () => {
   it("test_create_md_sends_upsert", async () => {

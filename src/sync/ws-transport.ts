@@ -1,4 +1,9 @@
-import { ServerMessageSchema, type ClientMessage, type ServerMessage } from "@notabeam/shared";
+import {
+  PROTOCOL_VERSION,
+  ServerMessageSchema,
+  type ClientMessage,
+  type ServerMessage,
+} from "@notabeam/shared";
 
 import type { Transport, TransportStatus } from "./transport";
 
@@ -23,8 +28,11 @@ export class WsTransport implements Transport {
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listenersAbort: AbortController | null = null;
+  // Аутентифицировано в текущем соединении (пришёл первый серверный ответ на auth-сообщение).
+  // До этого дельты не отправляем — сервер их всё равно отвергнет до auth (AUD-023/043).
+  private authConfirmed = false;
   // Неподтверждённые дельты (ключ — hlc): и очередь оффлайна, и in-flight в ожидании ack.
-  // Переотправляются на open (умирающий сокет мог проглотить отправку без ack). Сервер
+  // Переотправляются после auth-ok (умирающий сокет мог проглотить отправку без ack). Сервер
   // идемпотентен (compareHlc), поэтому at-least-once безопасен.
   private unacked = new Map<string, ClientMessage>();
 
@@ -44,8 +52,9 @@ export class WsTransport implements Transport {
   private open(): void {
     this.teardownSocket();
     this.statusHandler("connecting");
-    const cursor = this.cursorProvider();
-    const target = `${this.url}/sync?token=${encodeURIComponent(this.token)}&device=${encodeURIComponent(this.deviceId)}&cursor=${cursor}`;
+    this.authConfirmed = false;
+    // AUD-023: токен НЕ в query (не утекает в логи/историю) — уходит auth-сообщением на open
+    const target = `${this.url}/sync`;
     let ws: WebSocket;
     try {
       ws = this.wsFactory(target);
@@ -67,7 +76,16 @@ export class WsTransport implements Transport {
         this.attempt = 0;
         this.statusHandler("open");
         this.openHandler();
-        this.resendUnacked();
+        // auth-сообщение первым; unacked зашлём после auth-ok (первого серверного ответа)
+        ws.send(
+          JSON.stringify({
+            v: PROTOCOL_VERSION,
+            type: "auth",
+            token: this.token,
+            device: this.deviceId,
+            cursor: this.cursorProvider(),
+          }),
+        );
       },
       opts,
     );
@@ -82,6 +100,11 @@ export class WsTransport implements Transport {
         }
         const msg = ServerMessageSchema.safeParse(parsed);
         if (!msg.success) return;
+        // первый серверный ответ = auth-ok (snapshot/ops/delta); теперь можно слать unacked
+        if (!this.authConfirmed) {
+          this.authConfirmed = true;
+          this.resendUnacked();
+        }
         // ack снимает дельту с переотправки (транспорт) И доходит до движка: он отмечает
         // путь как подтверждённый сервером — baseline для конфликт-копий (AUD-004).
         if (msg.data.type === "ack") this.unacked.delete(msg.data.hlc);
@@ -141,10 +164,11 @@ export class WsTransport implements Transport {
 
   send(msg: ClientMessage): void {
     if (msg.type === "delta") this.unacked.set(msg.delta.hlc, msg); // держим до ack
-    if (this.ws && this.ws.readyState === WS_OPEN) {
+    // шлём только после auth-ok: до этого сервер отвергнет дельту (AUD-023). Не открыт или
+    // не аутентифицирован — дельта останется в unacked и уйдёт на resendUnacked.
+    if (this.ws && this.ws.readyState === WS_OPEN && this.authConfirmed) {
       this.ws.send(JSON.stringify(msg));
     }
-    // если сокет не открыт — дельта останется в unacked и уйдёт на open (resendUnacked)
   }
 
   private resendUnacked(): void {

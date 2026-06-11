@@ -76,8 +76,19 @@ export const MAX_ATTACHMENT_HARD_CAP = 100 * 1024 * 1024;
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   z.object({ v: z.literal(PROTOCOL_VERSION), type: z.literal("delta"), delta: DeltaSchema }),
+  // AUD-023: токен — первым auth-сообщением на чистый /sync, не в query (не утекает в
+  // логи прокси/истории URL). До успешной auth сервер не шлёт snapshot/ops и не принимает
+  // delta. Браузерный WS не может слать заголовки на upgrade → auth ранним сообщением.
+  z.object({
+    v: z.literal(PROTOCOL_VERSION),
+    type: z.literal("auth"),
+    token: z.string().min(1).max(512),
+    device: z.string().min(1).max(256),
+    cursor: z.number().int().nonnegative().default(0),
+  }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+export type AuthMessage = Extract<ClientMessage, { type: "auth" }>;
 
 export const OpEntrySchema = z.object({ seq: z.number().int().nonnegative(), delta: DeltaSchema });
 export type OpEntry = z.infer<typeof OpEntrySchema>;
