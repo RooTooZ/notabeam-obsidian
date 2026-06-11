@@ -1,3 +1,4 @@
+import { sha256Hex } from "@notabeam/shared";
 import { describe, expect, it } from "vitest";
 
 import { type BlobHttp, HttpBlobClient, httpBaseFromWs } from "@/sync/blob-client";
@@ -44,12 +45,17 @@ describe("HttpBlobClient", () => {
     expect(await tooLarge.upload("h", enc("x"))).toEqual({ ok: false, status: 413 });
   });
 
-  it("download: 200 → bytes, 404 → null", async () => {
+  it("download: 200 + matching sha256 → bytes; mismatch → null; 404 → null", async () => {
     const data = enc("payload");
+    const hash = await sha256Hex(data);
     const has = new HttpBlobClient("http://s", "t", fakeHttp({ GET: { status: 200, arrayBuffer: data } }));
-    expect(await has.download("h")).toBe(data);
+    expect(await has.download(hash)).toBe(data);
+
+    // байты не хэшируются в запрошенный hash → подмена отвергается (AUD-020)
+    const tampered = new HttpBlobClient("http://s", "t", fakeHttp({ GET: { status: 200, arrayBuffer: data } }));
+    expect(await tampered.download("0".repeat(64))).toBeNull();
 
     const none = new HttpBlobClient("http://s", "t", fakeHttp({ GET: { status: 404 } }));
-    expect(await none.download("h")).toBeNull();
+    expect(await none.download(hash)).toBeNull();
   });
 });

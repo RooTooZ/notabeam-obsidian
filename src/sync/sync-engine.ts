@@ -3,6 +3,7 @@ import {
   DEFAULT_MAX_ATTACHMENT_BYTES,
   isSyncablePath,
   isTextSyncedPath,
+  MAX_ATTACHMENT_HARD_CAP,
   normalizePath,
   PROTOCOL_VERSION,
   sha256Hex,
@@ -171,7 +172,9 @@ export class SyncEngine {
   async applySnapshot(msg: SnapshotMessage): Promise<void> {
     if (this.halted) return;
     if (!(await this.checkBinding(msg))) return;
-    this.maxAttachmentBytes = msg.maxAttachmentBytes;
+    // эффективный лимит = min(серверный, жёсткий клиентский потолок) — защита от
+    // злонамеренного сервера, объявляющего огромный лимит (AUD-039)
+    this.maxAttachmentBytes = Math.min(msg.maxAttachmentBytes, MAX_ATTACHMENT_HARD_CAP);
     for (const d of [...msg.dirs].sort((a, b) => a.path.length - b.path.length)) {
       const path = normalizePath(d.path);
       if (!isSyncablePath(path)) continue; // поэлементно: один плохой путь не рушит весь снапшот
@@ -197,9 +200,12 @@ export class SyncEngine {
       this.hlc.observe(a.hlc);
       const cur = this.attachShadow.get(path);
       if (cur && compareHlc(a.hlc, cur.hlc) <= 0) continue;
-      this.attachShadow.set(path, { hlc: a.hlc, hash: a.hash });
-      await this.ensureLocalAttachment(path, a.hash);
-      this.status(path, "synced");
+      if (await this.ensureLocalAttachment(path, a.hash)) {
+        this.attachShadow.set(path, { hlc: a.hlc, hash: a.hash });
+        this.status(path, "synced");
+      } else {
+        this.status(path, "error");
+      }
     }
     const tombstoned = new Set<string>();
     for (const t of msg.tombstones) {
@@ -225,12 +231,18 @@ export class SyncEngine {
     }
   }
 
-  private async ensureLocalAttachment(path: string, hash: string): Promise<void> {
-    if (!this.attachments) return;
+  private async ensureLocalAttachment(path: string, hash: string): Promise<boolean> {
+    if (!this.attachments) return true;
     const local = await this.port.readBinary(path);
-    if (local && (await sha256Hex(local)) === hash) return;
+    if (local && (await sha256Hex(local)) === hash) return true;
     const data = await this.attachments.blob.download(hash);
-    if (data) await this.port.writeBinary(path, data);
+    if (!data) return false; // download/sha256 не прошёл — shadow не отравляем, повтор при следующем snapshot
+    if (data.byteLength > this.maxAttachmentBytes) {
+      this.attachments.onOversize?.(path, data.byteLength, this.maxAttachmentBytes);
+      return false;
+    }
+    await this.port.writeBinary(path, data);
+    return true;
   }
 
   private async checkBinding(msg: SnapshotMessage): Promise<boolean> {
@@ -291,9 +303,12 @@ export class SyncEngine {
     if (delta.op === "attach") {
       const cur = this.attachShadow.get(delta.path);
       if (cur && compareHlc(delta.hlc, cur.hlc) <= 0) return;
-      this.attachShadow.set(delta.path, { hlc: delta.hlc, hash: delta.hash });
-      await this.ensureLocalAttachment(delta.path, delta.hash);
-      this.status(delta.path, "synced");
+      if (await this.ensureLocalAttachment(delta.path, delta.hash)) {
+        this.attachShadow.set(delta.path, { hlc: delta.hlc, hash: delta.hash });
+        this.status(delta.path, "synced");
+      } else {
+        this.status(delta.path, "error");
+      }
       return;
     }
 
@@ -423,13 +438,18 @@ export class SyncEngine {
       this.status(path, "synced");
       return;
     }
-    if (!(await this.attachments.blob.has(hash))) {
-      const res = await this.attachments.blob.upload(hash, data);
-      if (!res.ok) {
-        if (res.status === 413) this.attachments.onOversize?.(path, size, this.maxAttachmentBytes);
-        this.status(path, "error");
-        return;
+    try {
+      if (!(await this.attachments.blob.has(hash))) {
+        const res = await this.attachments.blob.upload(hash, data);
+        if (!res.ok) {
+          if (res.status === 413) this.attachments.onOversize?.(path, size, this.maxAttachmentBytes);
+          this.status(path, "error");
+          return;
+        }
       }
+    } catch {
+      this.status(path, "error"); // офлайн/сеть — не роняем процесс; повтор при следующем редактировании
+      return;
     }
     const hlc = this.hlc.next();
     this.attachShadow.set(path, { hlc, hash });

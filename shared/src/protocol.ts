@@ -65,6 +65,9 @@ export const SnapshotTombstoneSchema = z.object({
 export type SnapshotTombstone = z.infer<typeof SnapshotTombstoneSchema>;
 
 export const DEFAULT_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+// Жёсткий клиентский потолок: серверный maxAttachmentBytes приходит от того же
+// (возможно злонамеренного) сервера, поэтому эффективный лимит = min(server, HARD_CAP).
+export const MAX_ATTACHMENT_HARD_CAP = 100 * 1024 * 1024;
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   z.object({ v: z.literal(PROTOCOL_VERSION), type: z.literal("delta"), delta: DeltaSchema }),

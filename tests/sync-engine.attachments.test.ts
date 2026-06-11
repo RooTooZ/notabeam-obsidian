@@ -171,6 +171,28 @@ describe("SyncEngine attachments (Spec-03)", () => {
       toPath: "b/pic.png",
     });
   });
+
+  // MS11-011 / AUD-017: провал скачивания не отравляет shadow → ретрай на следующем snapshot
+  it("test_failed_download_retries_on_next_snapshot", async () => {
+    const { vault, engine, blob } = setup();
+    const data = bytes(9, 9, 9);
+    const hash = await sha256Hex(data);
+    const msg = (): SnapshotMessage => ({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      files: [],
+      dirs: [],
+      attachments: [{ path: "img.png", hash, size: 3, hlc: hlc(1) }],
+      tombstones: [],
+      vaultId: "v1",
+      maxAttachmentBytes: 10 * 1024 * 1024,
+    });
+    await engine.applySnapshot(msg()); // блоба ещё нет → download null → файл не создан
+    expect(await vault.readBinary("img.png")).toBeNull();
+    blob.store.set(hash, data); // блоб появился
+    await engine.applySnapshot(msg()); // тот же hlc — но shadow не отравлен → ретрай
+    expect(new Uint8Array((await vault.readBinary("img.png"))!)).toEqual(new Uint8Array(data));
+  });
 });
 
 // snapshot with a given attachment limit (vaultId does not matter — binding is not connected).

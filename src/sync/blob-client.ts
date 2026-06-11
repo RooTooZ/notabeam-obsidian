@@ -1,3 +1,5 @@
+import { sha256Hex } from "@notabeam/shared";
+
 export type BlobHttp = (req: {
   url: string;
   method: string;
@@ -48,6 +50,10 @@ export class HttpBlobClient implements BlobClient {
 
   async download(hash: string): Promise<ArrayBuffer | null> {
     const r = await this.http({ url: this.url(hash), method: "GET", headers: this.headers() });
-    return r.status === 200 ? r.arrayBuffer : null;
+    if (r.status !== 200) return null;
+    // content-addressing: байты обязаны хэшироваться в запрошенный hash (защита от
+    // подмены злонамеренным/MITM-сервером), зеркально серверному PUT
+    if ((await sha256Hex(r.arrayBuffer)) !== hash) return null;
+    return r.arrayBuffer;
   }
 }
