@@ -4,7 +4,9 @@ import { PathSchema } from "./path";
 
 export const PROTOCOL_VERSION = 1;
 
-export const HlcSchema = z.string().min(1);
+// Формат HLC: millis(15):counter(6):node — фиксированная ширина для лексикографического
+// сравнения. Regex отсекает poison-HLC (напр. "~"), ломающий LWW и генератор часов.
+export const HlcSchema = z.string().regex(/^\d{15}:\d{6}:[A-Za-z0-9_-]{1,64}$/);
 
 export const TEXT_SYNC_EXTENSIONS = [".md", ".canvas", ".excalidraw"] as const;
 export const isTextSyncedPath = (path: string): boolean =>

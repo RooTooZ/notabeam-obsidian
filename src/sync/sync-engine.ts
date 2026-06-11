@@ -276,6 +276,7 @@ export class SyncEngine {
   async applyIncoming(delta: Delta): Promise<void> {
     if (this.halted) return;
     if (!deltaPathSafe(delta)) return; // defense-in-depth: не доверяем серверу/чужому клиенту
+    if (delta.op === "upsert" && !isTextSyncedPath(delta.path)) return; // бинарный путь — не текст
     this.hlc.observe(delta.hlc);
 
     if (delta.op === "mkdir") {
