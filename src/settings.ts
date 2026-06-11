@@ -64,13 +64,15 @@ export class SyncSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl).setName(t("settings.vaultToken.name")).addText((c) =>
+    new Setting(containerEl).setName(t("settings.vaultToken.name")).addText((c) => {
+      c.inputEl.type = "password"; // токен = полный доступ к vault — маскируем от подглядывания
+      c.inputEl.autocomplete = "off";
       c.setValue(this.plugin.settings.vaultToken).onChange(async (v) => {
         this.plugin.settings.vaultToken = v.trim();
         this.plugin.resetSyncCursor(); // смена токена → форсировать snapshot + проверку привязки
         await this.plugin.saveSettings();
-      }),
-    );
+      });
+    });
 
     new Setting(containerEl)
       .setName(t("settings.confirmMerge.name"))

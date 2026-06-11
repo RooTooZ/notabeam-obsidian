@@ -33,6 +33,10 @@ export class SetupConfirmModal extends Modal {
   override onOpen(): void {
     this.titleEl.setText(t("setup.title"));
     this.contentEl.createEl("p", { text: t("setup.message", { server: this.setup.serverUrl }) });
+    if (this.setup.serverUrl.startsWith("ws://")) {
+      const warn = this.contentEl.createEl("p", { text: t("setup.insecureWarning") });
+      warn.style.color = "var(--color-orange, #e0823d)";
+    }
     new Setting(this.contentEl)
       .addButton((b) =>
         b

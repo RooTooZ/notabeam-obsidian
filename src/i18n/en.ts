@@ -13,6 +13,8 @@ export const en = {
   "setup.cancel": "Cancel",
   "setup.applied": "Notabeam: connected to {server}.",
   "setup.invalid": "Notabeam: invalid setup link.",
+  "setup.insecureWarning":
+    "⚠ Unencrypted connection (ws://): the token and your notes travel in cleartext. Use only on a trusted local network.",
   "onboarding.title": "Get started",
   "onboarding.intro":
     "This vault is not connected yet. Run your own sync server with one command on any Linux server:",

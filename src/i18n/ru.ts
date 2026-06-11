@@ -15,6 +15,8 @@ export const ru: Partial<Record<TKey, string>> = {
   "setup.cancel": "Отмена",
   "setup.applied": "Notabeam: подключено к {server}.",
   "setup.invalid": "Notabeam: некорректная setup-ссылка.",
+  "setup.insecureWarning":
+    "⚠ Незашифрованное соединение (ws://): токен и заметки идут открытым текстом. Только для доверенной локальной сети.",
   "onboarding.title": "Как начать",
   "onboarding.intro":
     "Этот vault ещё не подключён. Запустите свой сервер синхронизации одной командой на любом Linux-сервере:",
