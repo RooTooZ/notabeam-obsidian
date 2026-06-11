@@ -47,7 +47,7 @@ describe("SyncEngine incoming serialization (MS11-006)", () => {
     engine.start();
     transport.emit(liveDelta("a.md", "v1", 1, 1));
     transport.emit(liveDelta("a.md", "v2", 2, 2));
-    await new Promise((r) => setTimeout(r, 60));
+    await engine.whenIdle();
     expect(await vault.read("a.md")).toBe("v2");
     expect(savedSeq).toBe(2);
   });

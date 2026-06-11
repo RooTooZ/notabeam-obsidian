@@ -53,7 +53,7 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
   });
 
   it("an ops batch is replayed in order, cursor = last seq", async () => {
-    const { vault, transport, cursor } = setup();
+    const { vault, transport, cursor, engine } = setup();
     const ops: ServerMessage = {
       v: PROTOCOL_VERSION,
       type: "ops",
@@ -66,21 +66,21 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
       ],
     };
     transport.emit(ops);
-    await new Promise((r) => setTimeout(r, 0));
+    await engine.whenIdle();
     expect(await vault.read("b.md")).toBe("B");
     expect(await vault.read("a.md")).toBeNull(); // the delete from the batch was applied
     expect(cursor()).toBe(7);
   });
 
   it("a live delta with seq advances the cursor", async () => {
-    const { transport, cursor } = setup();
+    const { transport, cursor, engine } = setup();
     transport.emit({
       v: PROTOCOL_VERSION,
       type: "delta",
       delta: { op: "upsert", path: "x.md", content: "X", hlc: hlc(1) },
       seq: 99,
     });
-    await new Promise((r) => setTimeout(r, 0));
+    await engine.whenIdle();
     expect(cursor()).toBe(99);
   });
 

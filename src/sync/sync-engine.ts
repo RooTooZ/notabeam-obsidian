@@ -17,9 +17,13 @@ import type { HlcGen } from "./hlc";
 import type { Transport } from "./transport";
 import type { VaultPort } from "./vault-port";
 
-type ShadowEntry = { hlc: string; content: string | null };
+// content хранится как sha256(content), а не сырой текст: компактно для персиста
+// (data.json), и сравнения конфликт-копий идут по хэшу.
+export type ShadowEntry = { hlc: string; hash: string | null };
 type DirEntry = { hlc: string; exists: boolean };
 type AttachEntry = { hlc: string; hash: string | null };
+
+const textHash = (s: string): Promise<string> => sha256Hex(new TextEncoder().encode(s));
 
 // Защита границы доверия: входящая дельта от сервера не должна писать вне vault
 // или в `.obsidian/` (= RCE). Проверяем оба конца rename/renamedir.
@@ -50,6 +54,16 @@ export interface CursorStore {
   save(seq: number): void;
 }
 
+// Персистентный shadow файлов (path → {hlc, hash}). Переживает рестарт, чтобы при
+// старте не пере-апсертить весь vault со свежими HLC (AUD-003: клоббер чужих правок)
+// и распознать офлайн-правки (AUD-009). Только файлы (текст) — носитель риска потери
+// данных; вложения content-addressed, каталоги идемпотентны.
+export interface ShadowStore {
+  load(): Record<string, ShadowEntry> | undefined;
+  setFile(path: string, entry: ShadowEntry): void;
+  deleteFile(path: string): void;
+}
+
 export interface BindingHooks {
   getBound(): string;
   bind(vaultId: string): void;
@@ -69,6 +83,9 @@ export class SyncEngine {
   // FIFO-очередь обработки входящих: гарантирует строгий порядок (без реордера записей
   // по одному пути) и непрерывное продвижение курсора.
   private chain: Promise<void> = Promise.resolve();
+  // Стартовая сверка локального состояния с сервером выполняется один раз за соединение
+  // (на snapshot- или ops-пути) — чтобы офлайн-правки залились, а неизменённое — нет.
+  private startupReconcileDone = false;
 
   private cursor = 0;
 
@@ -80,7 +97,17 @@ export class SyncEngine {
     private readonly attachments?: AttachmentDeps,
     private readonly statusSink?: FileStatusSink,
     private readonly cursorStore?: CursorStore,
+    private readonly shadowStore?: ShadowStore,
   ) {}
+
+  // Единственная точка мутации файлового shadow: держит in-memory карту и персист
+  // синхронными. Удаление не персистим (tombstone не нужен на рестарте: офлайн-возврат
+  // файла даст cur=undefined → корректный апсерт), чтобы data.json не рос вечно.
+  private setShadow(path: string, entry: ShadowEntry): void {
+    this.shadow.set(path, entry);
+    if (entry.hash === null) this.shadowStore?.deleteFile(path);
+    else this.shadowStore?.setFile(path, entry);
+  }
 
   private setCursor(seq: number): void {
     if (seq <= this.cursor) return;
@@ -106,6 +133,8 @@ export class SyncEngine {
 
   start(): void {
     this.cursor = this.cursorStore?.load() ?? 0;
+    const persisted = this.shadowStore?.load();
+    if (persisted) for (const [p, e] of Object.entries(persisted)) this.shadow.set(p, e);
     this.transport.onMessage((msg) => {
       this.chain = this.chain.then(() => this.onServerMessage(msg)).catch(() => undefined);
     });
@@ -119,6 +148,11 @@ export class SyncEngine {
   stop(): void {
     this.halted = true; // прекращаем применение in-flight сообщений старого движка
     this.transport.close();
+  }
+
+  // Тест-шов: резолвится, когда текущая FIFO-очередь входящих отработана.
+  async whenIdle(): Promise<void> {
+    await this.chain;
   }
 
   private async onServerMessage(msg: ServerMessage): Promise<void> {
@@ -144,6 +178,7 @@ export class SyncEngine {
         }
         this.setCursor(e.seq);
       }
+      if (!this.startupReconcileDone) await this.reconcileFiles();
       return;
     }
     // live-дельта не несёт vaultId — при сконфигурированном binding применяем
@@ -192,10 +227,11 @@ export class SyncEngine {
       this.hlc.observe(f.hlc);
       const cur = this.shadow.get(path);
       if (cur && compareHlc(f.hlc, cur.hlc) <= 0) continue;
+      const incomingHash = await textHash(f.content);
       // AUD-011: на snapshot-пути локальная правка тоже не теряется молча
-      await this.maybeConflictCopy(path, f.content, f.hlc, cur?.content ?? null);
+      await this.maybeConflictCopy(path, incomingHash, f.hlc, cur?.hash ?? null);
       await this.port.write(path, f.content);
-      this.shadow.set(path, { hlc: f.hlc, content: f.content });
+      this.setShadow(path, { hlc: f.hlc, hash: incomingHash });
       this.status(path, "synced");
     }
     for (const a of msg.attachments) {
@@ -223,8 +259,11 @@ export class SyncEngine {
 
   private async reconcileLocal(tombstoned: Set<string>): Promise<void> {
     if (this.halted) return;
+    this.startupReconcileDone = true;
+    // handleLocalUpsert сам сверяет hash — неизменённый файл не шлёт апсерт (AUD-003),
+    // изменённый офлайн — заливает (AUD-009). Поэтому не пропускаем уже известные пути.
     for (const f of await this.port.list()) {
-      if (this.shadow.has(f.path) || tombstoned.has(f.path)) continue;
+      if (tombstoned.has(f.path)) continue;
       await this.handleLocalUpsert(f.path);
     }
     if (this.attachments) {
@@ -233,6 +272,14 @@ export class SyncEngine {
         await this.handleLocalAttach(p);
       }
     }
+  }
+
+  // ops-путь не несёт snapshot и не запускает полную сверку — но persisted shadow мог
+  // разойтись с диском (офлайн-правки), поэтому одноразово сверяем файлы (AUD-009).
+  private async reconcileFiles(): Promise<void> {
+    if (this.halted) return;
+    this.startupReconcileDone = true;
+    for (const f of await this.port.list()) await this.handleLocalUpsert(f.path);
   }
 
   private async ensureLocalAttachment(path: string, hash: string): Promise<boolean> {
@@ -279,14 +326,17 @@ export class SyncEngine {
 
   // Сохраняет расходящееся локальное содержимое рядом как конфликт-копию ПЕРЕД
   // перезаписью (REQ-02.8). Общий метод для applyIncoming и applySnapshot.
+  // Сравнение по хэшу: локальное расходится и с входящим, и с последним известным.
   private async maybeConflictCopy(
     path: string,
-    incoming: string,
+    incomingHash: string,
     hlc: string,
-    known: string | null,
+    knownHash: string | null,
   ): Promise<void> {
     const local = await this.port.read(path);
-    if (local !== null && local !== incoming && local !== known) {
+    if (local === null) return;
+    const localHash = await textHash(local);
+    if (localHash !== incomingHash && localHash !== knownHash) {
       await this.port.write(conflictPath(path, hlc), local);
     }
   }
@@ -354,17 +404,18 @@ export class SyncEngine {
     if (cur && compareHlc(delta.hlc, cur.hlc) <= 0) return;
 
     if (delta.op === "upsert") {
-      await this.maybeConflictCopy(delta.path, delta.content, delta.hlc, cur?.content ?? null);
+      const incomingHash = await textHash(delta.content);
+      await this.maybeConflictCopy(delta.path, incomingHash, delta.hlc, cur?.hash ?? null);
       await this.port.write(delta.path, delta.content);
-      this.shadow.set(delta.path, { hlc: delta.hlc, content: delta.content });
+      this.setShadow(delta.path, { hlc: delta.hlc, hash: incomingHash });
       this.status(delta.path, "synced");
     } else if (delta.op === "delete") {
       await this.port.trash(delta.path);
-      this.shadow.set(delta.path, { hlc: delta.hlc, content: null });
+      this.setShadow(delta.path, { hlc: delta.hlc, hash: null });
     } else {
       await this.port.rename(delta.fromPath, delta.toPath);
-      this.shadow.set(delta.toPath, { hlc: delta.hlc, content: cur?.content ?? null });
-      this.shadow.set(delta.fromPath, { hlc: delta.hlc, content: null });
+      this.setShadow(delta.toPath, { hlc: delta.hlc, hash: cur?.hash ?? null });
+      this.setShadow(delta.fromPath, { hlc: delta.hlc, hash: null });
       this.status(delta.toPath, "synced");
     }
   }
@@ -374,13 +425,14 @@ export class SyncEngine {
     if (!isTextSyncedPath(path)) return;
     const content = await this.port.read(path);
     if (content === null) return;
+    const hash = await textHash(content);
     const cur = this.shadow.get(path);
-    if (cur && cur.content === content) {
+    if (cur && cur.hash === hash) {
       this.status(path, "synced");
       return;
     }
     const hlc = this.hlc.next();
-    this.shadow.set(path, { hlc, content });
+    this.setShadow(path, { hlc, hash });
     this.transport.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "upsert", path, content, hlc } });
     this.status(path, "synced");
   }
@@ -392,9 +444,9 @@ export class SyncEngine {
       return;
     }
     const cur = this.shadow.get(path);
-    if (!cur || cur.content === null) return;
+    if (!cur || cur.hash === null) return;
     const hlc = this.hlc.next();
-    this.shadow.set(path, { hlc, content: null });
+    this.setShadow(path, { hlc, hash: null });
     this.transport.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path, hlc } });
   }
 
@@ -418,9 +470,9 @@ export class SyncEngine {
     }
     const cur = this.shadow.get(from);
     const hlc = this.hlc.next();
-    if (cur && cur.content !== null) {
-      this.shadow.set(to, { hlc, content: cur.content });
-      this.shadow.set(from, { hlc, content: null });
+    if (cur && cur.hash !== null) {
+      this.setShadow(to, { hlc, hash: cur.hash });
+      this.setShadow(from, { hlc, hash: null });
       this.transport.send({
         v: PROTOCOL_VERSION,
         type: "delta",
@@ -430,7 +482,7 @@ export class SyncEngine {
     }
     const content = await this.port.read(to);
     if (content === null) return;
-    this.shadow.set(to, { hlc, content });
+    this.setShadow(to, { hlc, hash: await textHash(content) });
     this.transport.send({
       v: PROTOCOL_VERSION,
       type: "delta",

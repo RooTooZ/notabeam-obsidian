@@ -9,6 +9,7 @@ import {
   type AttachmentDeps,
   type BindingHooks,
   type FileSyncState,
+  type ShadowEntry,
   SyncEngine,
 } from "./sync/sync-engine";
 import { VaultWatcher } from "./sync/vault-watcher";
@@ -36,12 +37,19 @@ const obsidianHttp: BlobHttp = async (req) => {
   return { status: res.status, arrayBuffer: res.arrayBuffer };
 };
 
-type PluginData = { settings: SyncSettings; lastHlc: string | null; lastSeq: number };
+type ShadowMap = Record<string, ShadowEntry>;
+type PluginData = {
+  settings: SyncSettings;
+  lastHlc: string | null;
+  lastSeq: number;
+  shadow: ShadowMap;
+};
 
 export default class NotabeamPlugin extends Plugin {
   override settings: SyncSettings = { ...DEFAULT_SETTINGS };
   private lastHlc: string | null = null;
   private lastSeq = 0;
+  private shadow: ShadowMap = {};
   private engine: SyncEngine | null = null;
   private watcher: VaultWatcher | null = null;
   private statusEl: HTMLElement | null = null;
@@ -70,7 +78,12 @@ export default class NotabeamPlugin extends Plugin {
     } catch {
       this.setStatus("error"); // битая конфигурация не должна блокировать загрузку плагина
     }
-    this.registerVaultEvents();
+    // События регистрируем после готовности layout: при старте Obsidian эмитит `create`
+    // для каждого уже существующего файла («create storm»). Поймав их на свежем движке,
+    // мы пере-апсертили бы весь vault со свежими HLC и затёрли чужие правки (AUD-003).
+    // После onLayoutReady стартовые события уже прошли; офлайн-правки подхватывает
+    // reconcile (по persisted shadow), а не эти события.
+    this.app.workspace.onLayoutReady(() => this.registerVaultEvents());
   }
 
   private setStatus(s: UiStatus): void {
@@ -178,6 +191,19 @@ export default class NotabeamPlugin extends Plugin {
           this.schedulePersist();
         },
       },
+      {
+        load: () => this.shadow,
+        setFile: (path, entry) => {
+          this.shadow[path] = entry;
+          this.schedulePersist();
+        },
+        deleteFile: (path) => {
+          if (path in this.shadow) {
+            delete this.shadow[path];
+            this.schedulePersist();
+          }
+        },
+      },
     );
     this.engine.start();
 
@@ -222,9 +248,12 @@ export default class NotabeamPlugin extends Plugin {
   }
 
   // Смена сервера/токена: сбрасываем курсор (lastSeq=0), форсируя snapshot и
-  // проверку привязки. boundVaultId НЕ трогаем — его меняет только явное действие.
+  // проверку привязки. Сбрасываем и persisted shadow — он описывал контент другого
+  // сервера; иначе reconcile решил бы, что новый (пустой) сервер уже всё знает, и не
+  // зальёт vault. boundVaultId НЕ трогаем — его меняет только явное действие.
   resetSyncCursor(): void {
     this.lastSeq = 0;
+    this.shadow = {};
     void this.persist();
   }
 
@@ -233,6 +262,7 @@ export default class NotabeamPlugin extends Plugin {
     if (data?.settings) this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
     this.lastHlc = data?.lastHlc ?? null;
     this.lastSeq = data?.lastSeq ?? 0;
+    this.shadow = data?.shadow ?? {};
   }
 
   // Горячий путь (курсор/HLC на каждую дельту) дебаунсится, чтобы не переписывать
@@ -256,6 +286,7 @@ export default class NotabeamPlugin extends Plugin {
         settings: this.settings,
         lastHlc: this.lastHlc,
         lastSeq: this.lastSeq,
+        shadow: this.shadow,
       } satisfies PluginData),
     );
     await this.persistChain;
