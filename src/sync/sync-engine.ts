@@ -87,6 +87,13 @@ export class SyncEngine {
     this.cursorStore?.save(seq);
   }
 
+  // snapshot-путь: допускает понижение курсора (сервер восстановлен из бэкапа, AUD-015),
+  // в отличие от монотонного ops-пути (владелец контракта setCursor — MS11-006).
+  private setCursorFromSnapshot(seq: number): void {
+    this.cursor = seq;
+    this.cursorStore?.save(seq);
+  }
+
   private status(path: string, state: FileSyncState): void {
     this.statusSink?.(path, state);
   }
@@ -118,7 +125,7 @@ export class SyncEngine {
       await this.applySnapshot(msg);
       if (!this.halted) {
         this.connectionVerified = true;
-        if (msg.cursor !== undefined) this.setCursor(msg.cursor);
+        if (msg.cursor !== undefined) this.setCursorFromSnapshot(msg.cursor);
       }
       return;
     }

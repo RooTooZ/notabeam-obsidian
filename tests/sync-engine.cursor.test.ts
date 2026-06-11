@@ -83,10 +83,12 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
     expect(cursor()).toBe(99);
   });
 
-  it("the cursor does not roll back", async () => {
+  // MS11-010 / AUD-015: snapshot допускает понижение курсора (сервер восстановлен из
+  // бэкапа). Монотонность сохраняется только на ops/live-пути.
+  it("a snapshot rolls the cursor back (server restored from backup)", async () => {
     const { transport, cursor } = setup(100);
-    transport.emit(snap(50)); // lower than the current one
+    transport.emit(snap(50)); // server maxSeq lower than client cursor
     await new Promise((r) => setTimeout(r, 0));
-    expect(cursor()).toBe(100);
+    expect(cursor()).toBe(50);
   });
 });
