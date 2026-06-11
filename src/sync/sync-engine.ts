@@ -122,6 +122,7 @@ export class SyncEngine {
   }
 
   private async onServerMessage(msg: ServerMessage): Promise<void> {
+    if (msg.type === "ack") return; // ack обрабатывается на уровне транспорта
     if (msg.type === "snapshot") {
       await this.applySnapshot(msg);
       if (!this.halted) {

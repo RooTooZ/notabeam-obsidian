@@ -23,7 +23,10 @@ export class WsTransport implements Transport {
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listenersAbort: AbortController | null = null;
-  private outbox: ClientMessage[] = [];
+  // Неподтверждённые дельты (ключ — hlc): и очередь оффлайна, и in-flight в ожидании ack.
+  // Переотправляются на open (умирающий сокет мог проглотить отправку без ack). Сервер
+  // идемпотентен (compareHlc), поэтому at-least-once безопасен.
+  private unacked = new Map<string, ClientMessage>();
 
   constructor(
     private readonly url: string,
@@ -64,7 +67,7 @@ export class WsTransport implements Transport {
         this.attempt = 0;
         this.statusHandler("open");
         this.openHandler();
-        this.flushOutbox();
+        this.resendUnacked();
       },
       opts,
     );
@@ -78,7 +81,12 @@ export class WsTransport implements Transport {
           return;
         }
         const msg = ServerMessageSchema.safeParse(parsed);
-        if (msg.success) this.messageHandler(msg.data);
+        if (!msg.success) return;
+        if (msg.data.type === "ack") {
+          this.unacked.delete(msg.data.hlc); // ack обрабатывается транспортом, не доходит до движка
+          return;
+        }
+        this.messageHandler(msg.data);
       },
       opts,
     );
@@ -133,18 +141,16 @@ export class WsTransport implements Transport {
   }
 
   send(msg: ClientMessage): void {
+    if (msg.type === "delta") this.unacked.set(msg.delta.hlc, msg); // держим до ack
     if (this.ws && this.ws.readyState === WS_OPEN) {
       this.ws.send(JSON.stringify(msg));
-    } else {
-      this.outbox.push(msg);
     }
+    // если сокет не открыт — дельта останется в unacked и уйдёт на open (resendUnacked)
   }
 
-  private flushOutbox(): void {
-    if (this.outbox.length === 0) return;
-    const pending = this.outbox;
-    this.outbox = [];
-    for (const msg of pending) this.ws?.send(JSON.stringify(msg));
+  private resendUnacked(): void {
+    if (this.ws?.readyState !== WS_OPEN) return;
+    for (const msg of this.unacked.values()) this.ws.send(JSON.stringify(msg));
   }
 
   onMessage(handler: (msg: ServerMessage) => void): void {

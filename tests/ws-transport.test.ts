@@ -79,6 +79,38 @@ describe("WsTransport reconnect", () => {
     expect(FakeWS.instances).toHaveLength(2);
   });
 
+  // MS11-008 / AUD-010: дельта, отправленная но не подтверждённая (умирающий сокет),
+  // переотправляется на reconnect; подтверждённая (ack) — нет.
+  it("test_unacked_delta_resent_on_reconnect", () => {
+    const hlc = "000000000000001:000000:x";
+    const t = new WsTransport("ws://x", "tok", "dev", factory);
+    t.connect();
+    const ws1 = FakeWS.instances[0]!;
+    ws1.emit("open");
+    t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "x.md", hlc } });
+    expect(ws1.sent).toHaveLength(1);
+    ws1.emit("close");
+    vi.advanceTimersByTime(1500);
+    const ws2 = FakeWS.instances[1]!;
+    ws2.emit("open");
+    expect(ws2.sent).toHaveLength(1); // переотправлено (ack не приходил)
+  });
+
+  it("test_acked_delta_not_resent_on_reconnect", () => {
+    const hlc = "000000000000001:000000:x";
+    const t = new WsTransport("ws://x", "tok", "dev", factory);
+    t.connect();
+    const ws1 = FakeWS.instances[0]!;
+    ws1.emit("open");
+    t.send({ v: PROTOCOL_VERSION, type: "delta", delta: { op: "delete", path: "x.md", hlc } });
+    ws1.emit("message", { data: JSON.stringify({ v: PROTOCOL_VERSION, type: "ack", hlc }) });
+    ws1.emit("close");
+    vi.advanceTimersByTime(1500);
+    const ws2 = FakeWS.instances[1]!;
+    ws2.emit("open");
+    expect(ws2.sent).toHaveLength(0); // acked → не переотправлено
+  });
+
   it("test_stop_cancels_reconnect", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);
     t.connect();

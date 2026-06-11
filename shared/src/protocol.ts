@@ -107,6 +107,13 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     maxAttachmentBytes: z.number().int().positive().default(DEFAULT_MAX_ATTACHMENT_BYTES),
     deltas: z.array(OpEntrySchema),
   }),
+  // Подтверждение применённой/идемпотентно-отклонённой дельты отправителю (ключ — hlc):
+  // позволяет переотправить неподтверждённые дельты при reconnect (умирающий сокет).
+  z.object({
+    v: z.literal(PROTOCOL_VERSION),
+    type: z.literal("ack"),
+    hlc: HlcSchema,
+  }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
