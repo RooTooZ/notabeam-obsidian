@@ -134,6 +134,7 @@ export class SyncEngine {
     if (msg.type === "ops") {
       if (!this.verifyVaultId(msg.vaultId)) return;
       this.connectionVerified = true;
+      this.maxAttachmentBytes = Math.min(msg.maxAttachmentBytes, MAX_ATTACHMENT_HARD_CAP);
       for (const e of msg.deltas) {
         try {
           await this.applyIncoming(e.delta);

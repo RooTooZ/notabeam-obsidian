@@ -110,6 +110,7 @@ describe("SyncEngine vault binding (REQ-01.12)", () => {
       v: PROTOCOL_VERSION,
       type: "ops",
       vaultId: "vault-Y",
+      maxAttachmentBytes: 10 * 1024 * 1024,
       deltas: [{ seq: 1, delta: { op: "upsert", path: "y.md", content: "Y", hlc: hlc(1) } }],
     });
     await new Promise((r) => setTimeout(r, 0));

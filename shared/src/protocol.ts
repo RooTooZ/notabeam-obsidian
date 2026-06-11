@@ -104,6 +104,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     v: z.literal(PROTOCOL_VERSION),
     type: z.literal("ops"),
     vaultId: z.string().min(1),
+    maxAttachmentBytes: z.number().int().positive().default(DEFAULT_MAX_ATTACHMENT_BYTES),
     deltas: z.array(OpEntrySchema),
   }),
 ]);

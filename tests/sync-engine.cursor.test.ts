@@ -58,6 +58,7 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
       v: PROTOCOL_VERSION,
       type: "ops",
       vaultId: "v1",
+      maxAttachmentBytes: 10 * 1024 * 1024,
       deltas: [
         { seq: 5, delta: { op: "upsert", path: "a.md", content: "A", hlc: hlc(1) } },
         { seq: 6, delta: { op: "upsert", path: "b.md", content: "B", hlc: hlc(2) } },
