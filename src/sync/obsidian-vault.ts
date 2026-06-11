@@ -52,7 +52,9 @@ export class ObsidianVault implements VaultPort {
     if (dir && this.vault.getAbstractFileByPath(dir) === null) {
       await this.vault.createFolder(dir).catch(() => undefined);
     }
-    await this.vault.rename(f, to);
+    // Целевой путь может быть локально занят: не роняем процесс (полноценная
+    // конфликт-копия для занятого пути — MS11-009).
+    await this.vault.rename(f, to).catch(() => undefined);
   }
 
   async exists(path: string): Promise<boolean> {
