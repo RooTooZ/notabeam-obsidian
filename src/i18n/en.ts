@@ -23,6 +23,8 @@ export const en = {
     "Notabeam: sync stopped. This vault is bound to {bound}…, but the server reported {server}…. Looks like the wrong server/token.",
   "binding.needConfirm":
     "Notabeam: both this vault and the server have content. To merge them, enable “Confirm merge” in Notabeam settings — only if it is the same vault.",
+  "binding.invalid":
+    "Notabeam: sync stopped. The server did not identify the vault. The connection is rejected for safety — check the server address and token.",
   "attachment.tooLarge":
     "Notabeam: “{path}” ({size} MB) exceeds the {max} MB limit and was not synced.",
   "file.synced": "Synced",

@@ -82,7 +82,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     dirs: z.array(SnapshotDirSchema).default([]),
     attachments: z.array(SnapshotAttachmentSchema).default([]),
     tombstones: z.array(SnapshotTombstoneSchema).default([]),
-    vaultId: z.string().default(""),
+    vaultId: z.string().min(1),
     maxAttachmentBytes: z.number().int().positive().default(DEFAULT_MAX_ATTACHMENT_BYTES),
     cursor: z.number().int().nonnegative().optional(),
   }),
@@ -95,6 +95,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
     v: z.literal(PROTOCOL_VERSION),
     type: z.literal("ops"),
+    vaultId: z.string().min(1),
     deltas: z.array(OpEntrySchema),
   }),
 ]);

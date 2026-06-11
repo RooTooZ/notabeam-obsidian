@@ -22,6 +22,7 @@ export interface SyncPluginLike extends Plugin {
   settings: SyncSettings;
   saveSettings(): Promise<void>;
   restartSync(): void;
+  resetSyncCursor(): void;
 }
 
 export function shouldShowOnboarding(settings: SyncSettings): boolean {
@@ -58,6 +59,7 @@ export class SyncSettingTab extends PluginSettingTab {
       .addText((c) =>
         c.setValue(this.plugin.settings.serverUrl).onChange(async (v) => {
           this.plugin.settings.serverUrl = v.trim();
+          this.plugin.resetSyncCursor(); // смена адреса → форсировать snapshot + проверку привязки
           await this.plugin.saveSettings();
         }),
       );
@@ -65,6 +67,7 @@ export class SyncSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName(t("settings.vaultToken.name")).addText((c) =>
       c.setValue(this.plugin.settings.vaultToken).onChange(async (v) => {
         this.plugin.settings.vaultToken = v.trim();
+        this.plugin.resetSyncCursor(); // смена токена → форсировать snapshot + проверку привязки
         await this.plugin.saveSettings();
       }),
     );

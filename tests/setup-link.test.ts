@@ -14,6 +14,7 @@ const makePlugin = () => {
     settings: { ...DEFAULT_SETTINGS, boundVaultId: "vault-1", vaultToken: "old-token" },
     saveSettings: vi.fn(async () => {}),
     restartSync: vi.fn(),
+    resetSyncCursor: vi.fn(),
   };
   return plugin as unknown as SyncPluginLike & { app: never } & typeof plugin;
 };

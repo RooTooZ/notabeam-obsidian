@@ -91,4 +91,29 @@ describe("SyncEngine vault binding (REQ-01.12)", () => {
     await engine.applySnapshot(snap("vault-X", [{ path: "srv.md", content: "S" }]));
     expect(await vault.read("srv.md")).toBe("S");
   });
+
+  // MS11-005 / AUD-006: пустой vaultId в snapshot — невалиден, не применяем
+  it("test_snapshot_empty_vaultid_refused_invalid", async () => {
+    const b = makeBinding("vault-X", false);
+    const { vault, engine } = setup(b.hooks);
+    await engine.applySnapshot(snap("", [{ path: "srv.md", content: "S" }]));
+    expect(b.calls.some((c) => c.startsWith("refuse:invalid"))).toBe(true);
+    expect(await vault.read("srv.md")).toBeNull();
+  });
+
+  // MS11-005 / AUD-005: ops чужого vault отклоняется (mismatch), не применяется
+  it("test_ops_from_mismatched_vault_refused", async () => {
+    const b = makeBinding("vault-X", false);
+    const { vault, transport, engine } = setup(b.hooks);
+    engine.start();
+    transport.emit({
+      v: PROTOCOL_VERSION,
+      type: "ops",
+      vaultId: "vault-Y",
+      deltas: [{ seq: 1, delta: { op: "upsert", path: "y.md", content: "Y", hlc: hlc(1) } }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(b.calls.some((c) => c.startsWith("refuse:mismatch"))).toBe(true);
+    expect(await vault.read("y.md")).toBeNull();
+  });
 });

@@ -57,6 +57,7 @@ describe("SyncEngine cursor + ops (Spec-02)", () => {
     const ops: ServerMessage = {
       v: PROTOCOL_VERSION,
       type: "ops",
+      vaultId: "v1",
       deltas: [
         { seq: 5, delta: { op: "upsert", path: "a.md", content: "A", hlc: hlc(1) } },
         { seq: 6, delta: { op: "upsert", path: "b.md", content: "B", hlc: hlc(2) } },

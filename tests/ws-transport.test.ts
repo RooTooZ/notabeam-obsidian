@@ -129,7 +129,7 @@ describe("WsTransport reconnect", () => {
     FakeWS.instances[0]!.emit("close");
     vi.advanceTimersByTime(1500);
     FakeWS.instances[1]!.emit("message", {
-      data: JSON.stringify({ v: PROTOCOL_VERSION, type: "snapshot", files: [] }),
+      data: JSON.stringify({ v: PROTOCOL_VERSION, type: "snapshot", files: [], vaultId: "v1" }),
     });
     expect(received).toHaveLength(1);
     expect(received[0]?.type).toBe("snapshot");

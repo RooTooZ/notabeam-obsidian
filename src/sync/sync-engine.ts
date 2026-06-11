@@ -53,7 +53,7 @@ export interface BindingHooks {
   getBound(): string;
   bind(vaultId: string): void;
   allowMerge(): boolean;
-  onRefuse(reason: "mismatch" | "needConfirm", serverVaultId: string, bound: string): void;
+  onRefuse(reason: "mismatch" | "needConfirm" | "invalid", serverVaultId: string, bound: string): void;
 }
 
 export class SyncEngine {
@@ -62,6 +62,9 @@ export class SyncEngine {
   private attachShadow = new Map<string, AttachEntry>();
   private halted = false;
   private maxAttachmentBytes = DEFAULT_MAX_ATTACHMENT_BYTES;
+  // Привязка vault подтверждена в рамках текущего соединения (через snapshot/ops с vaultId).
+  // До подтверждения не применяем live-дельты (не несут vaultId) — защита от чужого сервера.
+  private connectionVerified = false;
 
   private cursor = 0;
 
@@ -93,6 +96,9 @@ export class SyncEngine {
   start(): void {
     this.cursor = this.cursorStore?.load() ?? 0;
     this.transport.onMessage((msg) => void this.onServerMessage(msg));
+    this.transport.onOpen(() => {
+      this.connectionVerified = false;
+    });
     this.transport.connect();
   }
 
@@ -103,19 +109,45 @@ export class SyncEngine {
   private async onServerMessage(msg: ServerMessage): Promise<void> {
     if (msg.type === "snapshot") {
       await this.applySnapshot(msg);
-      if (!this.halted && msg.cursor !== undefined) this.setCursor(msg.cursor);
+      if (!this.halted) {
+        this.connectionVerified = true;
+        if (msg.cursor !== undefined) this.setCursor(msg.cursor);
+      }
       return;
     }
     if (this.halted) return;
     if (msg.type === "ops") {
+      if (!this.verifyVaultId(msg.vaultId)) return;
+      this.connectionVerified = true;
       for (const e of msg.deltas) {
         await this.applyIncoming(e.delta);
         this.setCursor(e.seq);
       }
       return;
     }
+    // live-дельта не несёт vaultId — при сконфигурированном binding применяем
+    // только после верификации привязки (snapshot/ops) в этом соединении
+    if (this.binding && !this.connectionVerified) return;
     await this.applyIncoming(msg.delta);
     if (msg.seq !== undefined) this.setCursor(msg.seq);
+  }
+
+  // Проверка привязки для ops-пути (snapshot проверяется в checkBinding).
+  private verifyVaultId(vaultId: string): boolean {
+    if (!this.binding) return true;
+    if (!vaultId) {
+      this.halted = true;
+      this.binding.onRefuse("invalid", "", this.binding.getBound());
+      return false;
+    }
+    const bound = this.binding.getBound();
+    if (bound && bound !== vaultId) {
+      this.halted = true;
+      this.binding.onRefuse("mismatch", vaultId, bound);
+      return false;
+    }
+    if (!bound) this.binding.bind(vaultId);
+    return true;
   }
 
   async applySnapshot(msg: SnapshotMessage): Promise<void> {
@@ -183,7 +215,12 @@ export class SyncEngine {
   }
 
   private async checkBinding(msg: SnapshotMessage): Promise<boolean> {
-    if (!this.binding || !msg.vaultId) return true;
+    if (!this.binding) return true;
+    if (!msg.vaultId) {
+      this.halted = true;
+      this.binding.onRefuse("invalid", "", this.binding.getBound());
+      return false;
+    }
     const bound = this.binding.getBound();
     if (bound) {
       if (bound !== msg.vaultId) {

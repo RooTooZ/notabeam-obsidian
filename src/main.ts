@@ -129,7 +129,9 @@ export default class NotabeamPlugin extends Plugin {
         const msg =
           reason === "mismatch"
             ? t("binding.mismatch", { bound: bound.slice(0, 8), server: serverVaultId.slice(0, 8) })
-            : t("binding.needConfirm");
+            : reason === "invalid"
+              ? t("binding.invalid")
+              : t("binding.needConfirm");
         new Notice(msg, 0);
         this.setStatus("error");
       },
@@ -206,6 +208,13 @@ export default class NotabeamPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.persist();
+  }
+
+  // Смена сервера/токена: сбрасываем курсор (lastSeq=0), форсируя snapshot и
+  // проверку привязки. boundVaultId НЕ трогаем — его меняет только явное действие.
+  resetSyncCursor(): void {
+    this.lastSeq = 0;
+    void this.persist();
   }
 
   private async loadPluginData(): Promise<void> {

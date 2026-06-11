@@ -16,6 +16,7 @@ export function parseSetupParams(params: Record<string, string | undefined>): Se
 export async function applySetup(plugin: SyncPluginLike, setup: SetupParams): Promise<void> {
   plugin.settings.serverUrl = setup.serverUrl;
   plugin.settings.vaultToken = setup.token;
+  plugin.resetSyncCursor(); // новый сервер/токен → форсировать snapshot + проверку привязки
   await plugin.saveSettings();
   plugin.restartSync();
 }
