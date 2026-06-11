@@ -101,13 +101,15 @@ export class SyncEngine {
     this.transport.onMessage((msg) => {
       this.chain = this.chain.then(() => this.onServerMessage(msg)).catch(() => undefined);
     });
-    this.transport.onOpen(() => {
-      this.connectionVerified = false;
-    });
+    // connectionVerified стартует false у свежего движка (защита привязки при смене
+    // сервера/токена через restartSync). Внутрисессионный ws-реконнект — к тому же
+    // серверу, поэтому сбрасывать флаг на onOpen не нужно (и нельзя — onOpen у транспорта
+    // единственный, его использует обвязка).
     this.transport.connect();
   }
 
   stop(): void {
+    this.halted = true; // прекращаем применение in-flight сообщений старого движка
     this.transport.close();
   }
 
@@ -160,6 +162,7 @@ export class SyncEngine {
   }
 
   async applySnapshot(msg: SnapshotMessage): Promise<void> {
+    if (this.halted) return;
     if (!(await this.checkBinding(msg))) return;
     this.maxAttachmentBytes = msg.maxAttachmentBytes;
     for (const d of [...msg.dirs].sort((a, b) => a.path.length - b.path.length)) {

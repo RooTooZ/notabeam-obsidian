@@ -46,6 +46,8 @@ export default class NotabeamPlugin extends Plugin {
   private watcher: VaultWatcher | null = null;
   private statusEl: HTMLElement | null = null;
   private badges: FileBadges | null = null;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistChain: Promise<void> = Promise.resolve();
 
   override async onload(): Promise<void> {
     setLocale(detectLocale());
@@ -64,6 +66,7 @@ export default class NotabeamPlugin extends Plugin {
       this.app.workspace.onLayoutReady(() => this.badges?.start());
     }
     this.restartSync();
+    this.registerVaultEvents();
   }
 
   private setStatus(s: UiStatus): void {
@@ -86,6 +89,7 @@ export default class NotabeamPlugin extends Plugin {
     this.watcher?.dispose();
     this.engine?.stop();
     this.badges?.dispose();
+    void this.persist(); // best-effort флаш отложенной записи
   }
 
   restartSync(): void {
@@ -114,7 +118,7 @@ export default class NotabeamPlugin extends Plugin {
       load: () => this.lastHlc,
       save: (h) => {
         this.lastHlc = h;
-        void this.persist();
+        this.schedulePersist();
       },
     });
 
@@ -167,30 +171,34 @@ export default class NotabeamPlugin extends Plugin {
         load: () => this.lastSeq,
         save: (seq) => {
           this.lastSeq = seq;
-          void this.persist();
+          this.schedulePersist();
         },
       },
     );
     this.engine.start();
 
-    const watcher = new VaultWatcher(this.engine);
-    this.watcher = watcher;
+    // Обработчики событий регистрируются ОДИН раз в onload (registerVaultEvents) и
+    // делегируют в текущий this.watcher — иначе повторный restartSync плодит «двойной движок».
+    this.watcher = new VaultWatcher(this.engine);
+  }
+
+  private registerVaultEvents(): void {
     this.registerEvent(
       this.app.vault.on("create", (f) => {
-        if (f instanceof TFile) watcher.onUpsert(f.path);
-        else if (f instanceof TFolder) watcher.onMkdir(f.path);
+        if (f instanceof TFile) this.watcher?.onUpsert(f.path);
+        else if (f instanceof TFolder) this.watcher?.onMkdir(f.path);
       }),
     );
     this.registerEvent(
       this.app.vault.on("modify", (f) => {
-        if (f instanceof TFile) watcher.onUpsert(f.path);
+        if (f instanceof TFile) this.watcher?.onUpsert(f.path);
       }),
     );
     this.registerEvent(
       this.app.vault.on("delete", (f) => {
-        if (f instanceof TFolder) watcher.onRmdir(f.path);
+        if (f instanceof TFolder) this.watcher?.onRmdir(f.path);
         else {
-          watcher.onDelete(f.path);
+          this.watcher?.onDelete(f.path);
           this.badges?.clear(f.path);
         }
       }),
@@ -199,9 +207,8 @@ export default class NotabeamPlugin extends Plugin {
       this.app.vault.on("rename", (f, oldPath) => {
         if (f instanceof TFile) {
           this.badges?.clear(oldPath);
-          watcher.onRename(oldPath, f.path);
-        }
-        else if (f instanceof TFolder) watcher.onRenamedir(oldPath, f.path);
+          this.watcher?.onRename(oldPath, f.path);
+        } else if (f instanceof TFolder) this.watcher?.onRenamedir(oldPath, f.path);
       }),
     );
   }
@@ -224,11 +231,29 @@ export default class NotabeamPlugin extends Plugin {
     this.lastSeq = data?.lastSeq ?? 0;
   }
 
+  // Горячий путь (курсор/HLC на каждую дельту) дебаунсится, чтобы не переписывать
+  // data.json тысячи раз при первичной синхронизации и не терять настройки на гонке.
+  private schedulePersist(): void {
+    if (this.persistTimer !== null) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      void this.persist();
+    }, 800);
+  }
+
   private async persist(): Promise<void> {
-    await this.saveData({
-      settings: this.settings,
-      lastHlc: this.lastHlc,
-      lastSeq: this.lastSeq,
-    } satisfies PluginData);
+    if (this.persistTimer !== null) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    // единая цепочка: записи data.json не выполняются параллельно (риск битого JSON)
+    this.persistChain = this.persistChain.then(() =>
+      this.saveData({
+        settings: this.settings,
+        lastHlc: this.lastHlc,
+        lastSeq: this.lastSeq,
+      } satisfies PluginData),
+    );
+    await this.persistChain;
   }
 }
