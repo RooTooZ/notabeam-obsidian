@@ -192,8 +192,10 @@ export class SyncEngine {
       this.hlc.observe(f.hlc);
       const cur = this.shadow.get(path);
       if (cur && compareHlc(f.hlc, cur.hlc) <= 0) continue;
-      this.shadow.set(path, { hlc: f.hlc, content: f.content });
+      // AUD-011: на snapshot-пути локальная правка тоже не теряется молча
+      await this.maybeConflictCopy(path, f.content, f.hlc, cur?.content ?? null);
       await this.port.write(path, f.content);
+      this.shadow.set(path, { hlc: f.hlc, content: f.content });
       this.status(path, "synced");
     }
     for (const a of msg.attachments) {
@@ -275,6 +277,20 @@ export class SyncEngine {
     return true;
   }
 
+  // Сохраняет расходящееся локальное содержимое рядом как конфликт-копию ПЕРЕД
+  // перезаписью (REQ-02.8). Общий метод для applyIncoming и applySnapshot.
+  private async maybeConflictCopy(
+    path: string,
+    incoming: string,
+    hlc: string,
+    known: string | null,
+  ): Promise<void> {
+    const local = await this.port.read(path);
+    if (local !== null && local !== incoming && local !== known) {
+      await this.port.write(conflictPath(path, hlc), local);
+    }
+  }
+
   async applyIncoming(delta: Delta): Promise<void> {
     if (this.halted) return;
     if (!deltaPathSafe(delta)) return; // defense-in-depth: не доверяем серверу/чужому клиенту
@@ -338,10 +354,7 @@ export class SyncEngine {
     if (cur && compareHlc(delta.hlc, cur.hlc) <= 0) return;
 
     if (delta.op === "upsert") {
-      const local = await this.port.read(delta.path);
-      if (local !== null && local !== delta.content && local !== (cur?.content ?? null)) {
-        await this.port.write(conflictPath(delta.path, delta.hlc), local);
-      }
+      await this.maybeConflictCopy(delta.path, delta.content, delta.hlc, cur?.content ?? null);
       await this.port.write(delta.path, delta.content);
       this.shadow.set(delta.path, { hlc: delta.hlc, content: delta.content });
       this.status(delta.path, "synced");

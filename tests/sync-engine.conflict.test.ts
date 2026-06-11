@@ -65,6 +65,17 @@ describe("SyncEngine conflict copies (REQ-02.8)", () => {
     expect([...vault.files.keys()].some((p) => p.includes("(conflict"))).toBe(false);
   });
 
+  // MS11-009 / AUD-011: на snapshot-пути локальная правка тоже не теряется молча
+  it("applySnapshot saves divergent local content as conflict copy", async () => {
+    const { vault, engine } = setup();
+    await vault.write("note.md", "local-only"); // локальная правка до первого snapshot
+    await engine.applySnapshot(snap([{ path: "note.md", content: "server-version", hlc: hlc(1) }]));
+    expect(await vault.read("note.md")).toBe("server-version");
+    const conflict = [...vault.files.keys()].find((p) => p.includes("(conflict"));
+    expect(conflict).toBeTruthy();
+    expect(await vault.read(conflict!)).toBe("local-only");
+  });
+
   it("works for .canvas", async () => {
     const { vault, engine } = setup();
     await engine.applySnapshot(snap([{ path: "b.canvas", content: "{}", hlc: hlc(1) }]));
