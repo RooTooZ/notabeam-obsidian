@@ -54,6 +54,21 @@ describe("nextBackoffDelay", () => {
   });
 });
 
+// MS11-016 / AUD-033: невалидный URL (конструктор WebSocket бросает) не роняет плагин
+describe("WsTransport invalid URL", () => {
+  it("test_invalid_url_terminal_no_reconnect", () => {
+    const statuses: string[] = [];
+    const throwingFactory = () => {
+      throw new SyntaxError("invalid url");
+    };
+    const t = new WsTransport("not a url", "tok", "dev", throwingFactory);
+    t.onStatus((s) => statuses.push(s));
+    expect(() => t.connect()).not.toThrow();
+    vi.advanceTimersByTime(60000);
+    expect(statuses).toContain("unauthorized"); // терминальный статус, без реконнект-шторма
+  });
+});
+
 describe("WsTransport reconnect", () => {
   it("test_reconnects_after_close", () => {
     const t = new WsTransport("ws://x", "tok", "dev", factory);

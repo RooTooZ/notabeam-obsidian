@@ -65,7 +65,11 @@ export default class NotabeamPlugin extends Plugin {
       this.badges = new FileBadges((s) => t(FILE_STATE_KEY[s]));
       this.app.workspace.onLayoutReady(() => this.badges?.start());
     }
-    this.restartSync();
+    try {
+      this.restartSync();
+    } catch {
+      this.setStatus("error"); // битая конфигурация не должна блокировать загрузку плагина
+    }
     this.registerVaultEvents();
   }
 

@@ -43,7 +43,16 @@ export class WsTransport implements Transport {
     this.statusHandler("connecting");
     const cursor = this.cursorProvider();
     const target = `${this.url}/sync?token=${encodeURIComponent(this.token)}&device=${encodeURIComponent(this.deviceId)}&cursor=${cursor}`;
-    const ws = this.wsFactory(target);
+    let ws: WebSocket;
+    try {
+      ws = this.wsFactory(target);
+    } catch {
+      // невалидный serverUrl (WebSocket-конструктор бросает синхронно) — терминальный
+      // статус без реконнект-шторма; плагин при этом продолжает грузиться
+      this.stopped = true;
+      this.statusHandler("unauthorized");
+      return;
+    }
     this.ws = ws;
     const ac = new AbortController();
     this.listenersAbort = ac;

@@ -13,9 +13,14 @@ export class FileBadges {
 
   start(): void {
     this.injectStyle();
-    const container = document.querySelector(".nav-files-container") ?? document.body;
-    this.observer = new MutationObserver(() => this.queueRepaint());
-    this.observer.observe(container, { childList: true, subtree: true });
+    // НЕ вешаем обсервер на document.body: иначе каждое нажатие в редакторе триггерит
+    // repaint. Наблюдаем только панель файлов; если она закрыта — обсервера нет
+    // (бейджи всё равно красятся через setState/querySelector).
+    const container = document.querySelector(".nav-files-container");
+    if (container) {
+      this.observer = new MutationObserver(() => this.queueRepaint());
+      this.observer.observe(container, { childList: true, subtree: true });
+    }
     this.repaintAll();
   }
 
@@ -71,7 +76,7 @@ export class FileBadges {
       badge.className = BADGE_CLASS;
       el.appendChild(badge);
     }
-    badge.textContent = GLYPH[state];
+    if (badge.textContent !== GLYPH[state]) badge.textContent = GLYPH[state]; // не самовозбуждать обсервер
     badge.dataset.nbState = state;
     badge.setAttribute("aria-label", this.label(state));
     badge.title = this.label(state);
